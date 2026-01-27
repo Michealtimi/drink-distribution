@@ -1,0 +1,33 @@
+{
+  "name": "beverage-distribution-crm",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "db:generate": "prisma generate",
+    "db:push": "prisma db push",
+    "db:studio": "prisma studio",
+    "db:migrate": "prisma migrate dev"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.7.1",
+    "chromium": "^3.0.3",
+    "install": "^0.13.0",
+    "next": "^14.0.4",
+    "node-cron": "^3.0.3",
+    "playwright": "^1.40.1",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.5",
+    "@types/react": "^18.2.45",
+    "@types/react-dom": "^18.2.18",
+    "prisma": "^5.7.1",
+    "typescript": "^5.3.3"
+  }
+}

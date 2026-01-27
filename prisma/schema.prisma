@@ -1,0 +1,241 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum LeadStatus {
+  SCRAPED
+  UNVERIFIED
+  VERIFIED
+  MESSAGED
+  INTERESTED
+  CUSTOMER
+  REPEAT_CUSTOMER
+  INVALID
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  DELIVERED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  OVERDUE
+  WRITTEN_OFF
+}
+
+enum City {
+  LAGOS
+  ABUJA
+}
+
+enum CustomerType {
+  GYM
+  EVENT_CENTER
+  CLUB
+  LOUNGE
+  OFFICE
+  SMALL_RETAILER
+  OTHER
+}
+
+enum ScraperType {
+  GOOGLE_MAPS
+  INSTAGRAM
+  DIRECTORY
+  BUSINESSLIST
+  FINELIB
+  FACEBOOK
+}
+
+enum ScrapingJobStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+model Lead {
+  id          String      @id @default(cuid())
+  name        String
+  phone       String
+  email       String?
+  address     String?
+  area        String?
+  city        City
+  category    CustomerType
+  status      LeadStatus  @default(UNVERIFIED)
+  hasWhatsApp Boolean     @default(false)
+  notes       String?
+  source      String?     // e.g., "Google Maps", "Instagram", "Directory"
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  // Relations
+  followUps   FollowUp[]
+  customer    Customer?
+
+  @@index([phone])
+  @@index([email])
+  @@index([status])
+  @@index([city])
+}
+
+model FollowUp {
+  id          String   @id @default(cuid())
+  leadId      String
+  scheduledFor DateTime
+  completed   Boolean  @default(false)
+  completedAt DateTime?
+  message     String?
+  notes       String?
+  createdAt   DateTime @default(now())
+
+  lead        Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([leadId])
+  @@index([scheduledFor])
+  @@index([completed])
+}
+
+model Customer {
+  id          String   @id @default(cuid())
+  leadId      String   @unique
+  name        String
+  phone       String
+  address     String?
+  area        String?
+  city        City
+  category    CustomerType
+  deliveryDay String?  // e.g., "Monday", "Wednesday"
+  creditLimit Float?   @default(0)
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  lead        Lead     @relation(fields: [leadId], references: [id])
+  orders      Order[]
+  routes      RouteCustomer[]
+
+  @@index([phone])
+  @@index([city])
+  @@index([area])
+}
+
+model Order {
+  id            String        @id @default(cuid())
+  customerId    String
+  orderNumber   String        @unique
+  status        OrderStatus   @default(PENDING)
+  totalAmount   Float
+  paymentStatus PaymentStatus @default(PENDING)
+  deliveryDate  DateTime?
+  notes         String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  // Relations
+  customer      Customer      @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  items         OrderItem[]
+  payments      Payment[]
+
+  @@index([customerId])
+  @@index([status])
+  @@index([orderNumber])
+  @@index([paymentStatus])
+}
+
+model OrderItem {
+  id          String  @id @default(cuid())
+  orderId    String
+  productName String  // e.g., "Red Bull", "Cognac"
+  quantity   Int
+  unitPrice  Float
+  totalPrice  Float
+  createdAt   DateTime @default(now())
+
+  order      Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+}
+
+model Payment {
+  id            String        @id @default(cuid())
+  orderId       String
+  amount        Float
+  paymentDate   DateTime      @default(now())
+  paymentMethod String?       // e.g., "Cash", "Transfer", "POS"
+  reference     String?
+  notes         String?
+  createdAt     DateTime      @default(now())
+
+  order         Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@index([paymentDate])
+}
+
+model Route {
+  id          String   @id @default(cuid())
+  name        String   // e.g., "Lagos - Victoria Island - Monday"
+  city        City
+  dayOfWeek   String   // e.g., "Monday", "Wednesday"
+  area        String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  customers   RouteCustomer[]
+
+  @@index([city])
+  @@index([dayOfWeek])
+}
+
+model RouteCustomer {
+  id         String   @id @default(cuid())
+  routeId    String
+  customerId String
+  sequence   Int      // Order in the route
+  createdAt  DateTime @default(now())
+
+  route      Route    @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@unique([routeId, customerId])
+  @@index([routeId])
+  @@index([customerId])
+}
+
+model ScrapingJob {
+  id            String            @id @default(cuid())
+  type          ScraperType
+  status        ScrapingJobStatus @default(PENDING)
+  query         String?
+  city          City?
+  category      CustomerType?
+  leadsFound    Int               @default(0)
+  leadsImported Int               @default(0)
+  duplicates    Int               @default(0)
+  errors        String?           // JSON array of error messages
+  startedAt     DateTime?
+  completedAt   DateTime?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  @@index([status])
+  @@index([type])
+  @@index([createdAt])
+}
