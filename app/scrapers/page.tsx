@@ -1,533 +1,467 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
-import { useRouter } from 'next/navigation'
-import Link from 'next/link'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import ToastContainer, { useToast } from '../components/Toast'
 
-interface AxiomImport {
+const SCRAPER_OPTIONS = [
+  { value: 'GOOGLE_MAPS', label: 'Google Maps', description: 'Search businesses on Google Maps' },
+  { value: 'INSTAGRAM', label: 'Instagram', description: 'Scrape business pages from Instagram' },
+  { value: 'DIRECTORY', label: 'Business Directory', description: 'General business directory sites' },
+  { value: 'BUSINESSLIST', label: 'BusinessList Nigeria', description: 'BusinessList.ng directory' },
+  { value: 'FINELIB', label: 'Finelib', description: 'Finelib.com business listings' },
+  { value: 'FACEBOOK', label: 'Facebook', description: 'Facebook business pages' },
+] as const
+
+const CITIES = [
+  { value: '', label: 'Any' },
+  { value: 'LAGOS', label: 'Lagos' },
+  { value: 'ABUJA', label: 'Abuja' },
+]
+
+const CATEGORIES = [
+  { value: '', label: 'Any' },
+  { value: 'DISTRIBUTOR', label: 'Distributor' },
+  { value: 'SUPPLIER', label: 'Supplier' },
+  { value: 'CONSUMER', label: 'Consumer' },
+  { value: 'GYM', label: 'Gym' },
+  { value: 'EVENT_CENTER', label: 'Event Center' },
+  { value: 'CLUB', label: 'Club' },
+  { value: 'LOUNGE', label: 'Lounge' },
+  { value: 'OFFICE', label: 'Office' },
+  { value: 'SMALL_RETAILER', label: 'Small Retailer' },
+  { value: 'OTHER', label: 'Other' },
+]
+
+interface ScrapingJob {
   id: string
-  name: string
-  source: string
+  type: string
+  status: string
+  query: string | null
+  city: string | null
+  category: string | null
+  leadsFound: number
+  leadsImported: number
+  duplicates: number
   createdAt: string
-  city: string
-  category: string
+  completedAt: string | null
 }
 
-interface SourceGroup {
-  source: string
-  count: number
-  recent: AxiomImport[]
-}
-
-interface AxiomStatistics {
-  totalImportedToday: number
-  totalImportedThisMonth: number
-  successRate: number
-  hoursUsed: number
-  daysRemaining: number
-  quotaLimit: number
-}
-
-interface AxiomData {
-  recentImports: SourceGroup[]
-  statistics: AxiomStatistics
-  recentLeads: AxiomImport[]
-}
-
-interface Toast {
-  id: string
-  message: string
-  type: 'success' | 'error' | 'info'
+const statusColor: Record<string, string> = {
+  PENDING: '#f59e0b',
+  RUNNING: '#3b82f6',
+  COMPLETED: '#10b981',
+  FAILED: '#ef4444',
+  CANCELLED: '#6b7280',
 }
 
 export default function ScrapersPage() {
-  const router = useRouter()
-  const [data, setData] = useState<AxiomData | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [toasts, setToasts] = useState<Toast[]>([])
-  const [testingApi, setTestingApi] = useState(false)
+  const { toasts, showToast, removeToast } = useToast()
+  const [selectedTypes, setSelectedTypes] = useState<Set<string>>(new Set())
+  const [query, setQuery] = useState('')
+  const [queries, setQueries] = useState('')
+  const [city, setCity] = useState('')
+  const [category, setCategory] = useState('')
+  const [running, setRunning] = useState(false)
+  const [jobs, setJobs] = useState<ScrapingJob[]>([])
+  const [loadingHistory, setLoadingHistory] = useState(true)
+  const [jobHistoryFilter, setJobHistoryFilter] = useState<string>('')
+  const [historyError, setHistoryError] = useState<string | null>(null)
 
-  // Toast notification system
-  const showToast = useCallback((message: string, type: 'success' | 'error' | 'info' = 'info') => {
-    const id = Math.random().toString(36).substr(2, 9)
-    setToasts((prev) => [...prev, { id, message, type }])
-    setTimeout(() => {
-      setToasts((prev) => prev.filter((t) => t.id !== id))
-    }, 5000)
+  const fetchHistory = useCallback(
+    async (options?: { showLoading?: boolean }): Promise<boolean> => {
+      const showSpinner = options?.showLoading ?? false
+      if (showSpinner) {
+        setLoadingHistory(true)
+        setHistoryError(null)
+      }
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 22000)
+      try {
+        const res = await fetch('/api/scrapers/history?limit=50', { signal: controller.signal })
+        clearTimeout(timeoutId)
+        const data = await res.json().catch(() => ({}))
+        if (res.ok && Array.isArray(data)) {
+          setJobs(data)
+          setHistoryError(null)
+          return true
+        }
+        if (showSpinner) {
+          setJobs([])
+          const msg = data?.error || (res.status === 503 ? 'Server timed out' : 'Failed to load')
+          setHistoryError(msg)
+          if (res.status !== 503 && res.status !== 500) showToast(msg, 'error')
+        }
+        return false
+      } catch (err) {
+        clearTimeout(timeoutId)
+        const isAbort = err instanceof Error && err.name === 'AbortError'
+        if (showSpinner) {
+          setJobs([])
+          setHistoryError(
+            isAbort
+              ? 'Request timed out. The database may be slow or unreachable.'
+              : 'Network or server error. Check that the app and database are running.'
+          )
+          showToast(isAbort ? 'Job history load timed out' : 'Failed to load job history', 'error')
+        }
+        return false
+      } finally {
+        if (showSpinner) setLoadingHistory(false)
+      }
+    },
+    [showToast]
+  )
+
+  const fetchHistoryRef = useRef(fetchHistory)
+  fetchHistoryRef.current = fetchHistory
+
+  useEffect(() => {
+    let cancelled = false
+    const runInitialWithRetry = async (attempt = 0) => {
+      const ok = await fetchHistoryRef.current({ showLoading: true })
+      if (cancelled) return
+      if (!ok && attempt < 1) {
+        await new Promise((r) => setTimeout(r, 2000))
+        if (!cancelled) await runInitialWithRetry(attempt + 1)
+      }
+    }
+    runInitialWithRetry()
+    const interval = setInterval(() => fetchHistoryRef.current({ showLoading: false }), 10000)
+    return () => {
+      cancelled = true
+      clearInterval(interval)
+    }
   }, [])
 
-  // Fetch Axiom data
-  const fetchAxiomData = useCallback(async () => {
+  const toggleScraper = (value: string) => {
+    setSelectedTypes((prev) => {
+      const next = new Set(prev)
+      if (next.has(value)) next.delete(value)
+      else next.add(value)
+      return next
+    })
+  }
+
+  const handleRun = async () => {
+    const types = Array.from(selectedTypes)
+    if (types.length === 0) {
+      showToast('Select at least one scraper', 'error')
+      return
+    }
+    const queryInput = queries.trim()
+      ? queries.split(/[\n,]/).map((q) => q.trim()).filter(Boolean)
+      : query.trim()
+        ? [query.trim()]
+        : []
+    if (queryInput.length === 0) {
+      showToast('Enter at least one search query', 'error')
+      return
+    }
+    setRunning(true)
     try {
-      const response = await fetch('/api/leads/axiom?limit=20')
-      if (!response.ok) {
-        throw new Error('Failed to fetch Axiom data')
+      const res = await fetch('/api/scrapers/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          types,
+          queries: queryInput,
+          query: queryInput.length === 1 ? queryInput[0] : undefined,
+          city: city || undefined,
+          category: category || undefined,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        showToast(data.error || 'Failed to start scraper', 'error')
+        return
       }
-      const result = await response.json()
-      
-      if (result.success) {
-        setData((prevData) => {
-          // Check for new imports and show toast
-          if (prevData) {
-            const currentCount = result.statistics.totalImportedThisMonth
-            const prevCount = prevData.statistics.totalImportedThisMonth
-            if (currentCount > prevCount) {
-              const newImports = currentCount - prevCount
-              showToast(`✅ ${newImports} new lead${newImports > 1 ? 's' : ''} imported from Axiom.ai`, 'success')
-            }
-          }
-          return result
-        })
-        setError(null)
-      } else {
-        throw new Error(result.error || 'Failed to fetch data')
-      }
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Unknown error'
-      setError(errorMessage)
-      showToast(`Error: ${errorMessage}`, 'error')
+      showToast(`Started ${data.jobIds?.length || 1} job(s). Check history below.`, 'success')
+      fetchHistory()
+    } catch {
+      showToast('Failed to start scraper', 'error')
     } finally {
-      setLoading(false)
+      setRunning(false)
+    }
+  }
+
+  const handleStopJob = useCallback(async (jobId: string) => {
+    try {
+      const res = await fetch(`/api/scrapers/${jobId}/cancel`, { method: 'POST' })
+      const data = res.ok ? await res.json() : {}
+      if (!res.ok) throw new Error(data.error || 'Failed to cancel')
+      showToast('Job cancelled', 'success')
+      fetchHistory()
+    } catch {
+      showToast('Failed to cancel job', 'error')
     }
   }, [showToast])
 
-  // Real-time polling every 5 seconds
-  useEffect(() => {
-    fetchAxiomData()
-    const interval = setInterval(fetchAxiomData, 5000)
-    return () => clearInterval(interval)
-  }, [fetchAxiomData])
-
-  // Test API endpoint
-  const testApiEndpoint = async () => {
-    setTestingApi(true)
-    try {
-      const apiUrl = `${window.location.origin}/api/leads/axiom`
-      const response = await fetch(apiUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          leads: [
-            {
-              name: 'Test Business',
-              phone: '2348012345678',
-              city: 'LAGOS',
-              category: 'GYM',
-              source: 'Axiom.ai - Test',
-            },
-          ],
-          source: 'Axiom.ai - Test',
-        }),
-      })
-
-      const result = await response.json()
-      if (result.success) {
-        showToast('✅ API endpoint is working! Test lead imported successfully.', 'success')
-        fetchAxiomData() // Refresh data
-      } else {
-        showToast(`❌ API test failed: ${result.error || 'Unknown error'}`, 'error')
-      }
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Unknown error'
-      showToast(`❌ API test failed: ${errorMessage}`, 'error')
-    } finally {
-      setTestingApi(false)
-    }
-  }
-
-  // Get API endpoint URL
-  const getApiEndpoint = () => {
-    if (typeof window !== 'undefined') {
-      return `${window.location.origin}/api/leads/axiom`
-    }
-    return '/api/leads/axiom'
-  }
-
-  // Copy API endpoint to clipboard
-  const copyApiEndpoint = () => {
-    const endpoint = getApiEndpoint()
-    navigator.clipboard.writeText(endpoint)
-    showToast('API endpoint copied to clipboard!', 'success')
-  }
-
-  // Get environment indicator
-  const getEnvironment = () => {
-    if (typeof window !== 'undefined') {
-      return window.location.hostname === 'localhost' ? 'Local' : 'Production'
-    }
-    return 'Unknown'
-  }
-
-  // Calculate quota warning
-  const getQuotaWarning = () => {
-    if (!data) return null
-    const percentage = (data.statistics.hoursUsed / data.statistics.quotaLimit) * 100
-    if (percentage >= 100) {
-      return { level: 'error', message: 'Quota exceeded!' }
-    }
-    if (percentage >= 75) {
-      return { level: 'warning', message: 'Quota approaching limit' }
-    }
-    return null
-  }
-
-  if (loading && !data) {
-    return (
-      <div style={{ padding: '2rem', textAlign: 'center' }}>
-        <div>Loading Axiom.ai data...</div>
-      </div>
-    )
-  }
-
-  const quotaWarning = getQuotaWarning()
-
   return (
-    <div style={{ padding: '2rem', maxWidth: '1400px', margin: '0 auto' }}>
-      {/* Toast Notifications */}
-      <div
-        style={{
-          position: 'fixed',
-          top: '20px',
-          right: '20px',
-          zIndex: 1000,
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '0.5rem',
-        }}
+    <div style={{ padding: '2rem', maxWidth: '1200px', margin: '0 auto' }}>
+      <ToastContainer toasts={toasts} onRemove={removeToast} />
+
+      <h1 style={{ fontSize: '2rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>Web scrapers</h1>
+      <p style={{ color: '#6b7280', fontSize: '0.875rem', marginBottom: '0.5rem' }}>
+        Get leads (gyms, event centers, clubs, lounges, offices, retailers) in Lagos or Abuja into <strong>Leads</strong> so you can message and convert.
+      </p>
+      <p style={{ color: '#374151', fontSize: '0.875rem', marginBottom: '1.5rem' }}>
+        <strong>Recommended:</strong> Use the <strong>internal scrapers</strong> below (Finelib, Directory, Google Maps, BusinessList). One setup, no external services.
+      </p>
+
+      {/* Internal scrapers — primary path */}
+      <Section
+        title="Internal scrapers (Playwright)"
+        badge="Recommended · Free · Runs locally"
+        description="Built-in scrapers that run on your machine. Best for: gyms, events, clubs, lounges, offices, small retailers in Lagos/Abuja."
+        flow="Select scraper(s) → enter query (e.g. gym, event center, lounge) → choose city → Start → jobs run → results in Leads and Job history below."
+        pattern="One flow for all internal scrapers; no Axiom or Apify required."
       >
-        {toasts.map((toast) => (
-          <div
-            key={toast.id}
-            style={{
-              padding: '1rem 1.5rem',
-              backgroundColor: toast.type === 'error' ? '#ef4444' : toast.type === 'success' ? '#10b981' : '#3b82f6',
-              color: 'white',
-              borderRadius: '8px',
-              boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
-              minWidth: '300px',
-              animation: 'slideIn 0.3s ease-out',
-            }}
-          >
-            {toast.message}
-          </div>
-        ))}
-      </div>
-
-      {/* Header */}
-      <div style={{ marginBottom: '2rem' }}>
-        <h1 style={{ fontSize: '2rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>
-          Lead Scrapers (Axiom.ai)
-        </h1>
-        <p style={{ color: '#6b7280', fontSize: '0.875rem' }}>
-          Browser automation for lead generation. All imports are handled via Axiom.ai bots.
-        </p>
-      </div>
-
-      {/* Quota Usage Card */}
-      {data && (
-        <div
-          style={{
-            backgroundColor: 'white',
-            padding: '1.5rem',
-            borderRadius: '8px',
-            border: '1px solid #e0e0e0',
-            marginBottom: '2rem',
-          }}
-        >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-            <h2 style={{ fontSize: '1.25rem', fontWeight: '600' }}>Quota Usage</h2>
-            {quotaWarning && (
-              <span
-                style={{
-                  padding: '0.5rem 1rem',
-                  backgroundColor: quotaWarning.level === 'error' ? '#fee2e2' : '#fef3c7',
-                  color: quotaWarning.level === 'error' ? '#991b1b' : '#92400e',
-                  borderRadius: '6px',
-                  fontSize: '0.875rem',
-                  fontWeight: '500',
-                }}
-              >
-                ⚠️ {quotaWarning.message}
-              </span>
-            )}
-          </div>
-
-          <div style={{ marginBottom: '1rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-              <span style={{ fontSize: '0.875rem', color: '#6b7280' }}>Hours Used</span>
-              <span style={{ fontWeight: '600' }}>
-                {data.statistics.hoursUsed.toFixed(2)} / {data.statistics.quotaLimit.toFixed(1)} hours
-              </span>
-            </div>
-            <div
-              style={{
-                width: '100%',
-                height: '8px',
-                backgroundColor: '#e5e7eb',
-                borderRadius: '4px',
-                overflow: 'hidden',
-              }}
-            >
-              <div
-                style={{
-                  width: `${Math.min(100, (data.statistics.hoursUsed / data.statistics.quotaLimit) * 100)}%`,
-                  height: '100%',
-                  backgroundColor:
-                    quotaWarning?.level === 'error'
-                      ? '#ef4444'
-                      : quotaWarning?.level === 'warning'
-                      ? '#f59e0b'
-                      : '#10b981',
-                  transition: 'width 0.3s ease',
-                }}
-              />
-            </div>
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem' }}>
-            <div>
-              <div style={{ fontSize: '0.875rem', color: '#6b7280', marginBottom: '0.25rem' }}>Leads Imported</div>
-              <div style={{ fontSize: '1.5rem', fontWeight: '600' }}>{data.statistics.totalImportedThisMonth}</div>
-              <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>This month</div>
-            </div>
-            <div>
-              <div style={{ fontSize: '0.875rem', color: '#6b7280', marginBottom: '0.25rem' }}>Imported Today</div>
-              <div style={{ fontSize: '1.5rem', fontWeight: '600' }}>{data.statistics.totalImportedToday}</div>
-              <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>Last 24 hours</div>
-            </div>
-            <div>
-              <div style={{ fontSize: '0.875rem', color: '#6b7280', marginBottom: '0.25rem' }}>Days Remaining</div>
-              <div style={{ fontSize: '1.5rem', fontWeight: '600' }}>{data.statistics.daysRemaining}</div>
-              <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>In current month</div>
-            </div>
-          </div>
+        <div style={{ marginBottom: '1rem', padding: '1rem 1.25rem', backgroundColor: '#eff6ff', border: '1px solid #93c5fd', borderRadius: '8px', fontSize: '0.875rem' }}>
+          <strong style={{ display: 'block', marginBottom: '0.5rem', color: '#1e40af' }}>First-time setup</strong>
+          <ol style={{ margin: 0, paddingLeft: '1.25rem', color: '#1e3a8a' }}>
+            <li><code style={{ backgroundColor: '#dbeafe', padding: '0.15rem 0.4rem', borderRadius: '4px' }}>pnpm install</code></li>
+            <li><code style={{ backgroundColor: '#dbeafe', padding: '0.15rem 0.4rem', borderRadius: '4px' }}>npx playwright install chromium</code></li>
+            <li>Select one or more scrapers below, enter a query (e.g. <strong>gym</strong>, <strong>event center</strong>, <strong>lounge</strong>), choose city, then click <strong>Start</strong>.</li>
+          </ol>
+          <p style={{ marginTop: '0.5rem', marginBottom: 0, color: '#1e3a8a', fontSize: '0.8rem' }}>If jobs finish with 0 leads, run <code style={{ backgroundColor: '#dbeafe', padding: '0.1rem 0.3rem', borderRadius: '4px' }}>npx playwright install chromium</code>. If Job history fails to load, set <code style={{ backgroundColor: '#dbeafe', padding: '0.1rem 0.3rem', borderRadius: '4px' }}>DATABASE_URL</code> in <code style={{ backgroundColor: '#dbeafe', padding: '0.1rem 0.3rem', borderRadius: '4px' }}>.env</code> and run <code style={{ backgroundColor: '#dbeafe', padding: '0.1rem 0.3rem', borderRadius: '4px' }}>pnpm db:push</code>.</p>
         </div>
-      )}
-
-      {/* Axiom.ai Setup Section */}
-      <div
-        style={{
-          backgroundColor: 'white',
-          padding: '1.5rem',
-          borderRadius: '8px',
-          border: '1px solid #e0e0e0',
-          marginBottom: '2rem',
-        }}
-      >
-        <h2 style={{ fontSize: '1.25rem', fontWeight: '600', marginBottom: '1rem' }}>Axiom.ai Setup</h2>
-
         <div style={{ marginBottom: '1rem' }}>
-          <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: '500', marginBottom: '0.5rem' }}>
-            API Endpoint
-          </label>
-          <div style={{ display: 'flex', gap: '0.5rem' }}>
-            <input
-              type="text"
-              readOnly
-              value={getApiEndpoint()}
-              style={{
-                flex: 1,
-                padding: '0.75rem',
-                borderRadius: '6px',
-                border: '1px solid #d1d5db',
-                backgroundColor: '#f9fafb',
-                fontSize: '0.875rem',
-                fontFamily: 'monospace',
-              }}
-            />
-            <button
-              onClick={copyApiEndpoint}
-              style={{
-                padding: '0.75rem 1rem',
-                backgroundColor: '#3b82f6',
-                color: 'white',
-                border: 'none',
-                borderRadius: '6px',
-                cursor: 'pointer',
-                fontSize: '0.875rem',
-                fontWeight: '500',
-              }}
-            >
-              Copy
-            </button>
-            <button
-              onClick={testApiEndpoint}
-              disabled={testingApi}
-              style={{
-                padding: '0.75rem 1rem',
-                backgroundColor: testingApi ? '#9ca3af' : '#10b981',
-                color: 'white',
-                border: 'none',
-                borderRadius: '6px',
-                cursor: testingApi ? 'not-allowed' : 'pointer',
-                fontSize: '0.875rem',
-                fontWeight: '500',
-                opacity: testingApi ? 0.6 : 1,
-              }}
-            >
-              {testingApi ? 'Testing...' : 'Test API'}
-            </button>
-          </div>
-        </div>
-
-        <div style={{ marginBottom: '1rem' }}>
-          <div style={{ fontSize: '0.875rem', color: '#6b7280', marginBottom: '0.5rem' }}>
-            Environment: <strong>{getEnvironment()}</strong>
-          </div>
-        </div>
-
-        <div>
-          <Link
-            href="/AXIOM_AI_SETUP.md"
-            target="_blank"
-            style={{
-              color: '#3b82f6',
-              textDecoration: 'underline',
-              fontSize: '0.875rem',
-            }}
-          >
-            📖 View Setup Instructions →
-          </Link>
-        </div>
-      </div>
-
-      {/* Recent Activity Feed */}
-      <div
-        style={{
-          backgroundColor: 'white',
-          borderRadius: '8px',
-          border: '1px solid #e0e0e0',
-          overflow: 'hidden',
-        }}
-      >
-        <div style={{ padding: '1.5rem', borderBottom: '1px solid #e0e0e0' }}>
-          <h2 style={{ fontSize: '1.25rem', fontWeight: '600', margin: 0 }}>Recent Activity Feed</h2>
-          <p style={{ fontSize: '0.875rem', color: '#6b7280', marginTop: '0.5rem', margin: 0 }}>
-            Last 20 imports from Axiom.ai bots (updates every 5 seconds)
-          </p>
-        </div>
-
-        {error && (
-          <div
-            style={{
-              padding: '1rem 1.5rem',
-              backgroundColor: '#fee2e2',
-              color: '#991b1b',
-              borderBottom: '1px solid #e0e0e0',
-            }}
-          >
-            <strong>Error:</strong> {error}
-          </div>
-        )}
-
-        {data && data.recentLeads.length > 0 ? (
-          <div style={{ maxHeight: '600px', overflowY: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr style={{ backgroundColor: '#f9fafb', borderBottom: '1px solid #e0e0e0' }}>
-                  <th style={{ padding: '1rem', textAlign: 'left', fontWeight: '600', fontSize: '0.875rem' }}>
-                    Time
-                  </th>
-                  <th style={{ padding: '1rem', textAlign: 'left', fontWeight: '600', fontSize: '0.875rem' }}>
-                    Business Name
-                  </th>
-                  <th style={{ padding: '1rem', textAlign: 'left', fontWeight: '600', fontSize: '0.875rem' }}>
-                    Source
-                  </th>
-                  <th style={{ padding: '1rem', textAlign: 'left', fontWeight: '600', fontSize: '0.875rem' }}>
-                    City
-                  </th>
-                  <th style={{ padding: '1rem', textAlign: 'left', fontWeight: '600', fontSize: '0.875rem' }}>
-                    Category
-                  </th>
-                  <th style={{ padding: '1rem', textAlign: 'left', fontWeight: '600', fontSize: '0.875rem' }}>
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.recentLeads.map((lead) => (
-                  <tr key={lead.id} style={{ borderBottom: '1px solid #f3f4f6' }}>
-                    <td style={{ padding: '1rem', fontSize: '0.875rem' }}>
-                      {new Date(lead.createdAt).toLocaleString()}
-                    </td>
-                    <td style={{ padding: '1rem', fontWeight: '500' }}>{lead.name}</td>
-                    <td style={{ padding: '1rem', fontSize: '0.875rem', color: '#6b7280' }}>
-                      {lead.source || 'Axiom.ai'}
-                    </td>
-                    <td style={{ padding: '1rem', fontSize: '0.875rem' }}>{lead.city}</td>
-                    <td style={{ padding: '1rem', fontSize: '0.875rem' }}>{lead.category}</td>
-                    <td style={{ padding: '1rem' }}>
-                      <Link
-                        href={`/leads/${lead.id}`}
-                        style={{
-                          color: '#3b82f6',
-                          textDecoration: 'underline',
-                          fontSize: '0.875rem',
-                        }}
-                      >
-                        View
-                      </Link>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <div style={{ padding: '3rem', textAlign: 'center', color: '#6b7280' }}>
-            <div style={{ marginBottom: '0.5rem' }}>No imports yet</div>
-            <div style={{ fontSize: '0.875rem' }}>
-              Set up your Axiom.ai bot and start importing leads. Check the setup guide above.
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+            <strong>Select scrapers to run</strong>
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <button type="button" onClick={() => setSelectedTypes(new Set(SCRAPER_OPTIONS.map((s) => s.value)))} style={btnSecondary}>All</button>
+              <button type="button" onClick={() => setSelectedTypes(new Set())} style={btnSecondary}>None</button>
             </div>
           </div>
-        )}
-      </div>
-
-      {/* Statistics Summary */}
-      {data && (
-        <div
-          style={{
-            marginTop: '2rem',
-            padding: '1.5rem',
-            backgroundColor: '#f9fafb',
-            borderRadius: '8px',
-            border: '1px solid #e0e0e0',
-          }}
-        >
-          <h3 style={{ fontSize: '1rem', fontWeight: '600', marginBottom: '1rem' }}>Import Statistics</h3>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1rem' }}>
-            <div>
-              <div style={{ fontSize: '0.875rem', color: '#6b7280' }}>Success Rate</div>
-              <div style={{ fontSize: '1.25rem', fontWeight: '600' }}>
-                {data.statistics.successRate.toFixed(1)}%
-              </div>
-            </div>
-            <div>
-              <div style={{ fontSize: '0.875rem', color: '#6b7280' }}>Quota Usage</div>
-              <div style={{ fontSize: '1.25rem', fontWeight: '600' }}>
-                {((data.statistics.hoursUsed / data.statistics.quotaLimit) * 100).toFixed(1)}%
-              </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '0.75rem' }}>
+            {SCRAPER_OPTIONS.map((opt) => (
+              <label key={opt.value} style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem', padding: '0.75rem', border: `2px solid ${selectedTypes.has(opt.value) ? '#3b82f6' : '#e5e7eb'}`, borderRadius: '8px', backgroundColor: selectedTypes.has(opt.value) ? '#eff6ff' : '#fff', cursor: 'pointer' }}>
+                <input type="checkbox" checked={selectedTypes.has(opt.value)} onChange={() => toggleScraper(opt.value)} style={{ marginTop: '0.2rem' }} />
+                <div>
+                  <div style={{ fontWeight: '600', fontSize: '0.875rem' }}>{opt.label}</div>
+                  <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>{opt.description}</div>
+                </div>
+              </label>
+            ))}
+          </div>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+          <div>
+            <label style={{ display: 'block', marginBottom: '0.25rem', fontWeight: '500', fontSize: '0.875rem' }}>Query (single or multiple, comma/newline)</label>
+            <input type="text" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="e.g. gym, event center, lounge" style={inputStyle} />
+            <textarea value={queries} onChange={(e) => setQueries(e.target.value)} placeholder="Or multiple queries…" rows={3} style={{ ...inputStyle, marginTop: '0.5rem' }} />
+          </div>
+          <div>
+            <label style={{ display: 'block', marginBottom: '0.25rem', fontWeight: '500', fontSize: '0.875rem' }}>City</label>
+            <select value={city} onChange={(e) => setCity(e.target.value)} style={inputStyle}>
+              {CITIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+            </select>
+            <label style={{ display: 'block', marginBottom: '0.25rem', marginTop: '0.75rem', fontWeight: '500', fontSize: '0.875rem' }}>Category</label>
+            <select value={category} onChange={(e) => setCategory(e.target.value)} style={inputStyle}>
+              {CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+            </select>
+            <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1rem', alignItems: 'center' }}>
+              <button type="button" onClick={handleRun} disabled={running} style={{ padding: '0.75rem 1.5rem', backgroundColor: running ? '#9ca3af' : '#3b82f6', color: 'white', border: 'none', borderRadius: '6px', fontWeight: '600', cursor: running ? 'not-allowed' : 'pointer' }}>
+                {running ? 'Starting…' : 'Start'}
+              </button>
+              <span style={{ fontSize: '0.875rem', color: '#6b7280' }}>Runs selected scrapers. Stop running jobs from the table below.</span>
             </div>
           </div>
         </div>
-      )}
-
-      <style jsx>{`
-        @keyframes slideIn {
-          from {
-            transform: translateX(100%);
-            opacity: 0;
-          }
-          to {
-            transform: translateX(0);
-            opacity: 1;
-          }
-        }
-      `}</style>
+        <JobHistoryTable
+          jobs={jobHistoryFilter ? jobs.filter((j) => j.type === jobHistoryFilter) : jobs}
+          loading={loadingHistory}
+          historyError={historyError}
+          onRefresh={fetchHistory}
+          onStopJob={handleStopJob}
+          filterType={jobHistoryFilter}
+          onFilterChange={setJobHistoryFilter}
+        />
+      </Section>
     </div>
   )
 }
+
+function Section({
+  title,
+  badge,
+  description,
+  flow,
+  pattern,
+  children,
+}: {
+  title: string
+  badge: string
+  description: string
+  flow?: string
+  pattern?: string
+  children: React.ReactNode
+}) {
+  return (
+    <div style={{ marginBottom: '2rem', padding: '1.5rem', backgroundColor: 'white', borderRadius: '8px', border: '1px solid #e0e0e0' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem', flexWrap: 'wrap' }}>
+        <h2 style={{ fontSize: '1.25rem', fontWeight: '600', margin: 0 }}>{title}</h2>
+        <span style={{ padding: '0.25rem 0.5rem', borderRadius: '6px', backgroundColor: '#d1fae5', color: '#065f46', fontSize: '0.75rem', fontWeight: '500' }}>{badge}</span>
+      </div>
+      <p style={{ fontSize: '0.875rem', color: '#6b7280', marginBottom: '0.5rem', marginTop: 0 }}>{description}</p>
+      {(flow || pattern) && (
+        <div style={{ fontSize: '0.8rem', color: '#4b5563', marginBottom: '1rem', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+          {flow && <div><strong>Flow:</strong> {flow}</div>}
+          {pattern && <div><strong>Pattern:</strong> {pattern}</div>}
+        </div>
+      )}
+      {children}
+    </div>
+  )
+}
+
+const inputStyle: React.CSSProperties = { width: '100%', padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '6px' }
+const btnSecondary: React.CSSProperties = { padding: '0.35rem 0.75rem', fontSize: '0.875rem', border: '1px solid #d1d5db', borderRadius: '6px', background: '#f9fafb', cursor: 'pointer' }
+
+const JOB_TYPE_FILTER_OPTIONS = [
+  { value: '', label: 'All scrapers' },
+  ...SCRAPER_OPTIONS.map((o) => ({ value: o.value, label: o.label })),
+]
+
+function JobHistoryTable({
+  jobs,
+  loading,
+  historyError,
+  onRefresh,
+  onStopJob,
+  filterType,
+  onFilterChange,
+}: {
+  jobs: ScrapingJob[]
+  loading: boolean
+  historyError: string | null
+  onRefresh: () => void
+  onStopJob: (jobId: string) => Promise<void>
+  filterType: string
+  onFilterChange: (type: string) => void
+}) {
+  const [stoppingId, setStoppingId] = useState<string | null>(null)
+
+  const handleStop = async (jobId: string) => {
+    setStoppingId(jobId)
+    try {
+      await onStopJob(jobId)
+      onRefresh()
+    } finally {
+      setStoppingId(null)
+    }
+  }
+
+  return (
+    <div style={{ marginTop: '1rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+        <div>
+          <strong>Job history</strong>
+          <p style={{ fontSize: '0.75rem', color: '#6b7280', margin: '0.25rem 0 0 0' }}>Each row is one run. Use <strong>View details</strong> to see that job's full history (status, errors, imported leads).</p>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <label style={{ fontSize: '0.875rem', color: '#4b5563' }}>Scraper:</label>
+          <select
+            value={filterType}
+            onChange={(e) => onFilterChange(e.target.value)}
+            style={{ padding: '0.35rem 0.6rem', borderRadius: '6px', border: '1px solid #d1d5db', fontSize: '0.875rem', backgroundColor: 'white' }}
+          >
+            {JOB_TYPE_FILTER_OPTIONS.map((opt) => (
+              <option key={opt.value || 'all'} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
+          <button type="button" onClick={onRefresh} style={btnSecondary}>Refresh</button>
+        </div>
+      </div>
+      {loading ? (
+        <div style={{ padding: '1.5rem', backgroundColor: '#f9fafb', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
+          <p style={{ fontSize: '0.875rem', color: '#6b7280', margin: 0 }}>Loading job history…</p>
+          <p style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: '0.5rem', marginBottom: 0 }}>Connecting to database. This may take a few seconds on first load.</p>
+        </div>
+      ) : historyError ? (
+        <div style={{ padding: '1.5rem', backgroundColor: '#fef2f2', borderRadius: '8px', border: '1px solid #fecaca' }}>
+          <p style={{ fontSize: '0.875rem', color: '#991b1b', margin: 0, fontWeight: '500' }}>Job history could not be loaded</p>
+          <p style={{ fontSize: '0.875rem', color: '#b91c1c', marginTop: '0.5rem', marginBottom: '0.75rem' }}>{historyError}</p>
+          <p style={{ fontSize: '0.8rem', color: '#7f1d1d', marginBottom: '0.75rem' }}>Ensure <code style={{ background: '#fee2e2', padding: '0.1rem 0.3rem', borderRadius: '4px' }}>DATABASE_URL</code> is set in <code style={{ background: '#fee2e2', padding: '0.1rem 0.3rem', borderRadius: '4px' }}>.env</code> and the database is running. Run <code style={{ background: '#fee2e2', padding: '0.1rem 0.3rem', borderRadius: '4px' }}>pnpm db:push</code> if you haven't applied migrations.</p>
+          <button type="button" onClick={onRefresh} style={{ padding: '0.5rem 1rem', backgroundColor: '#dc2626', color: 'white', border: 'none', borderRadius: '6px', fontWeight: '500', cursor: 'pointer' }}>Retry</button>
+        </div>
+      ) : jobs.length === 0 ? (
+        <div style={{ padding: '1.5rem', backgroundColor: '#f9fafb', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
+          <p style={{ fontSize: '0.875rem', color: '#374151', margin: 0, fontWeight: '500' }}>
+            {filterType ? `No jobs for this scraper yet.` : 'No scraper jobs yet.'}
+          </p>
+          <p style={{ fontSize: '0.875rem', color: '#6b7280', marginTop: '0.5rem', marginBottom: 0 }}>
+            {filterType ? 'Run this scraper above to see rows here.' : 'Select one or more scrapers above, enter a query, and click Start. Each job will appear here with View details and Stop.'}
+          </p>
+        </div>
+      ) : (
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
+            <thead>
+              <tr style={{ backgroundColor: '#f9fafb', borderBottom: '1px solid #e0e0e0' }}>
+                <th style={{ padding: '0.5rem 0.75rem', textAlign: 'left', fontWeight: '600' }}>Type</th>
+                <th style={{ padding: '0.5rem 0.75rem', textAlign: 'left', fontWeight: '600' }}>Status</th>
+                <th style={{ padding: '0.5rem 0.75rem', textAlign: 'left', fontWeight: '600' }}>Query</th>
+                <th style={{ padding: '0.5rem 0.75rem', textAlign: 'right', fontWeight: '600' }}>Found</th>
+                <th style={{ padding: '0.5rem 0.75rem', textAlign: 'right', fontWeight: '600' }}>Imported</th>
+                <th style={{ padding: '0.5rem 0.75rem', textAlign: 'left', fontWeight: '600' }}>Created</th>
+                <th style={{ padding: '0.5rem 0.75rem', textAlign: 'left', fontWeight: '600' }}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {jobs.map((job) => (
+                <tr key={job.id} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                  <td style={{ padding: '0.5rem 0.75rem' }}>{job.type.replace(/_/g, ' ')}</td>
+                  <td style={{ padding: '0.5rem 0.75rem' }}>
+                    <span style={{ padding: '0.2rem 0.5rem', borderRadius: '6px', fontSize: '0.75rem', fontWeight: '500', backgroundColor: `${statusColor[job.status] || '#6b7280'}20`, color: statusColor[job.status] || '#374151' }}>{job.status}</span>
+                  </td>
+                  <td style={{ padding: '0.5rem 0.75rem', maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={job.query || undefined}>{job.query || '–'}</td>
+                  <td style={{ padding: '0.5rem 0.75rem', textAlign: 'right' }}>{job.leadsFound}</td>
+                  <td style={{ padding: '0.5rem 0.75rem', textAlign: 'right' }}>{job.leadsImported}</td>
+                  <td style={{ padding: '0.5rem 0.75rem', color: '#6b7280' }}>{new Date(job.createdAt).toLocaleString()}</td>
+                  <td style={{ padding: '0.5rem 0.75rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                    {(job.status === 'PENDING' || job.status === 'RUNNING') && (
+                      <button
+                        type="button"
+                        onClick={() => handleStop(job.id)}
+                        disabled={stoppingId === job.id}
+                        style={{
+                          padding: '0.35rem 0.75rem',
+                          backgroundColor: stoppingId === job.id ? '#9ca3af' : '#ef4444',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '6px',
+                          fontSize: '0.8125rem',
+                          fontWeight: '500',
+                          cursor: stoppingId === job.id ? 'not-allowed' : 'pointer',
+                        }}
+                      >
+                        {stoppingId === job.id ? 'Stopping…' : 'Stop'}
+                      </button>
+                    )}
+                    <a
+                      href={`/scrapers/${job.id}`}
+                      style={{
+                        display: 'inline-block',
+                        padding: '0.35rem 0.75rem',
+                        backgroundColor: '#3b82f6',
+                        color: 'white',
+                        borderRadius: '6px',
+                        textDecoration: 'none',
+                        fontSize: '0.8125rem',
+                        fontWeight: '500',
+                      }}
+                    >
+                      View details
+                    </a>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+

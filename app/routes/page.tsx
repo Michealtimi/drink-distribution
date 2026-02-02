@@ -2,6 +2,10 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
+import ToastContainer, { useToast } from '../components/Toast'
+import LoadingSkeleton from '../components/LoadingSkeleton'
+import EmptyState from '../components/EmptyState'
+import SearchBar from '../components/SearchBar'
 
 interface Route {
   id: string
@@ -24,12 +28,35 @@ interface Route {
 
 export default function RoutesPage() {
   const [routes, setRoutes] = useState<Route[]>([])
+  const [filteredRoutes, setFilteredRoutes] = useState<Route[]>([])
   const [loading, setLoading] = useState(true)
   const [filterCity, setFilterCity] = useState<string>('')
+  const [searchQuery, setSearchQuery] = useState<string>('')
+  const [error, setError] = useState<string | null>(null)
+  const { toasts, showToast, removeToast } = useToast()
 
   useEffect(() => {
     fetchRoutes()
   }, [filterCity])
+
+  // Filter routes by search query
+  useEffect(() => {
+    if (!searchQuery.trim()) {
+      setFilteredRoutes(routes)
+      return
+    }
+
+    const query = searchQuery.toLowerCase()
+    const filtered = routes.filter((route) => {
+      return (
+        route.name.toLowerCase().includes(query) ||
+        route.city.toLowerCase().includes(query) ||
+        (route.area && route.area.toLowerCase().includes(query)) ||
+        route.dayOfWeek.toLowerCase().includes(query)
+      )
+    })
+    setFilteredRoutes(filtered)
+  }, [searchQuery, routes])
 
   const fetchRoutes = async () => {
     try {
@@ -37,21 +64,47 @@ export default function RoutesPage() {
       if (filterCity) params.append('city', filterCity)
 
       const response = await fetch(`/api/routes?${params.toString()}`)
+      if (!response.ok) {
+        throw new Error('Failed to fetch routes')
+      }
       const data = await response.json()
       setRoutes(data)
+      setFilteredRoutes(data)
+      setError(null)
     } catch (error) {
       console.error('Error fetching routes:', error)
+      setError('Failed to load routes. Please try again.')
+      showToast('Failed to load routes', 'error')
     } finally {
       setLoading(false)
     }
   }
 
   if (loading) {
-    return <div style={{ padding: '2rem' }}>Loading routes...</div>
+    return (
+      <>
+        <div style={{ padding: '2rem', maxWidth: '1400px', margin: '0 auto' }}>
+          <div style={{ marginBottom: '2rem' }}>
+            <div style={{ height: '2rem', width: '200px', backgroundColor: '#e5e7eb', borderRadius: '6px', marginBottom: '1rem' }} />
+            <div style={{ height: '1rem', width: '400px', backgroundColor: '#e5e7eb', borderRadius: '6px' }} />
+          </div>
+          <div style={{ display: 'grid', gap: '1.5rem' }}>
+            {[1, 2, 3].map((i) => (
+              <div key={i} style={{ backgroundColor: 'white', padding: '1.5rem', borderRadius: '8px', border: '1px solid #e0e0e0' }}>
+                <div style={{ height: '1.5rem', width: '200px', backgroundColor: '#e5e7eb', borderRadius: '4px', marginBottom: '0.5rem' }} />
+                <div style={{ height: '1rem', width: '300px', backgroundColor: '#e5e7eb', borderRadius: '4px' }} />
+              </div>
+            ))}
+          </div>
+        </div>
+        <ToastContainer toasts={toasts} onRemove={removeToast} />
+      </>
+    )
   }
 
   return (
     <div style={{ padding: '2rem', maxWidth: '1400px', margin: '0 auto' }}>
+      <ToastContainer toasts={toasts} onRemove={removeToast} />
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
         <h1 style={{ fontSize: '2rem', fontWeight: 'bold' }}>Delivery Routes</h1>
         <Link
@@ -68,7 +121,17 @@ export default function RoutesPage() {
         </Link>
       </div>
 
-      <div style={{ marginBottom: '1.5rem' }}>
+      <div style={{ 
+        display: 'flex', 
+        gap: '1rem', 
+        marginBottom: '1.5rem',
+        flexWrap: 'wrap',
+        alignItems: 'center',
+      }}>
+        <SearchBar
+          placeholder="Search by route name, city, area..."
+          onSearch={setSearchQuery}
+        />
         <select
           value={filterCity}
           onChange={(e) => setFilterCity(e.target.value)}
@@ -84,8 +147,39 @@ export default function RoutesPage() {
         </select>
       </div>
 
+      {error && (
+        <div style={{ padding: '2rem', textAlign: 'center', marginBottom: '1.5rem' }}>
+          <div style={{ 
+            padding: '1rem', 
+            backgroundColor: '#fee2e2', 
+            color: '#991b1b', 
+            borderRadius: '6px',
+            marginBottom: '1rem',
+          }}>
+            {error}
+          </div>
+          <button
+            onClick={() => {
+              setError(null)
+              fetchRoutes()
+            }}
+            style={{
+              padding: '0.75rem 1.5rem',
+              backgroundColor: '#3b82f6',
+              color: 'white',
+              borderRadius: '6px',
+              border: 'none',
+              cursor: 'pointer',
+              fontWeight: '500',
+            }}
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
       <div style={{ display: 'grid', gap: '1.5rem' }}>
-        {routes.map((route) => (
+        {filteredRoutes.map((route) => (
           <div
             key={route.id}
             style={{
@@ -160,17 +254,21 @@ export default function RoutesPage() {
         ))}
       </div>
 
-      {routes.length === 0 && (
-        <div style={{
-          padding: '3rem',
-          textAlign: 'center',
-          backgroundColor: 'white',
-          borderRadius: '8px',
-          border: '1px solid #e0e0e0',
-          color: '#6b7280',
-        }}>
-          No routes yet. <Link href="/routes/new" style={{ color: '#3b82f6' }}>Create your first route</Link>
-        </div>
+      {!error && filteredRoutes.length === 0 && routes.length === 0 && (
+        <EmptyState
+          title="No routes yet"
+          description="Create delivery routes to organize customers by area and delivery day for efficient distribution."
+          actionLabel="Create Route"
+          actionHref="/routes/new"
+          icon="🗺️"
+        />
+      )}
+      {!error && filteredRoutes.length === 0 && routes.length > 0 && (
+        <EmptyState
+          title="No routes match your search"
+          description={`No routes found matching "${searchQuery}". Try adjusting your search or filters.`}
+          icon="🔍"
+        />
       )}
     </div>
   )

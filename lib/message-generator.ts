@@ -1,4 +1,5 @@
 import { CustomerType, City, LeadStatus } from '@prisma/client'
+import { prisma } from './prisma'
 
 interface MessageContext {
   name: string
@@ -11,6 +12,9 @@ interface MessageContext {
 }
 
 const categoryNames: Record<CustomerType, string> = {
+  DISTRIBUTOR: 'distributor',
+  SUPPLIER: 'supplier',
+  CONSUMER: 'consumer',
   GYM: 'gym',
   EVENT_CENTER: 'event center',
   CLUB: 'club',
@@ -80,17 +84,101 @@ export function generateFollowUpMessage(context: MessageContext): string {
 }
 
 /**
- * Generate message based on lead status and context
+ * Replace template variables with actual values
  */
-export function generateMessage(
-  status: LeadStatus,
-  context: MessageContext
-): string {
-  if (status === LeadStatus.MESSAGED || status === LeadStatus.INTERESTED) {
-    return generateFollowUpMessage(context)
+function replaceVariables(template: string, context: MessageContext): string {
+  const categoryNames: Record<CustomerType, string> = {
+    DISTRIBUTOR: 'distributor',
+    SUPPLIER: 'supplier',
+    CONSUMER: 'consumer',
+    GYM: 'gym',
+    EVENT_CENTER: 'event center',
+    CLUB: 'club',
+    LOUNGE: 'lounge',
+    OFFICE: 'office',
+    SMALL_RETAILER: 'retailer',
+    OTHER: 'business',
   }
 
-  return generateFirstMessage(context)
+  const cityNames: Record<City, string> = {
+    LAGOS: 'Lagos',
+    ABUJA: 'Abuja',
+  }
+
+  let result = template
+  result = result.replace(/\{\{name\}\}/g, context.name)
+  result = result.replace(/\{\{category\}\}/g, categoryNames[context.category])
+  result = result.replace(/\{\{city\}\}/g, cityNames[context.city])
+  result = result.replace(/\{\{area\}\}/g, context.area || '')
+  
+  return result
+}
+
+/**
+ * Get template from database or fallback to hardcoded
+ */
+async function getTemplate(
+  type: 'WHATSAPP' | 'EMAIL',
+  stage: string,
+  category?: CustomerType,
+  city?: City
+): Promise<string | null> {
+  try {
+    const template = await prisma.messageTemplate.findFirst({
+      where: {
+        type,
+        stage,
+        isActive: true,
+        ...(category && { category }),
+        ...(city && { city }),
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    })
+
+    return template?.content || null
+  } catch (error) {
+    console.error('Error fetching template:', error)
+    return null
+  }
+}
+
+export interface GenerateMessageResult {
+  content: string
+  fromTemplate: boolean
+}
+
+/**
+ * Generate message based on lead status and context (uses templates from DB).
+ * Returns content and whether it came from DB template (for visibility when fallback is used).
+ */
+export async function generateMessage(
+  status: LeadStatus,
+  context: MessageContext
+): Promise<GenerateMessageResult> {
+  let stage = 'FIRST_CONTACT'
+  if (status === LeadStatus.MESSAGED || status === LeadStatus.INTERESTED) {
+    if (context.isMonthEnd) {
+      stage = 'MONTH_END'
+    } else if (context.followUpDay === 2) {
+      stage = 'FOLLOW_UP_DAY_2'
+    } else if (context.followUpDay === 5) {
+      stage = 'FOLLOW_UP_DAY_5'
+    } else {
+      stage = 'FOLLOW_UP_DAY_2'
+    }
+  }
+
+  const template = await getTemplate('WHATSAPP', stage, context.category, context.city)
+  if (template) {
+    return { content: replaceVariables(template, context), fromTemplate: true }
+  }
+
+  if (status === LeadStatus.MESSAGED || status === LeadStatus.INTERESTED) {
+    return { content: generateFollowUpMessage(context), fromTemplate: false }
+  }
+  return { content: generateFirstMessage(context), fromTemplate: false }
 }
 
 /**

@@ -173,11 +173,19 @@ async function handleLeadImport(data: any, source?: string) {
       const normalizedLead = normalizedLeads.find(
         (nl) => nl.name === scrapedLead.name && nl.city === scrapedLead.city
       )
+      // Safety check: ensure we found a matching normalized lead
+      if (!normalizedLead) {
+        errors.push({
+          lead: scrapedLead,
+          error: 'Normalized lead not found for scraped lead after deduplication',
+        })
+        continue
+      }
 
       try {
         // Check for duplicate by email if phone is not available
-        if (!normalizedLead?.phone || normalizedLead.phone === 'NO_PHONE') {
-          if (normalizedLead?.email) {
+        if (!normalizedLead.phone || normalizedLead.phone === 'NO_PHONE') {
+          if (normalizedLead.email) {
             const existingByEmail = await tx.lead.findFirst({
               where: {
                 email: normalizedLead.email,
@@ -196,21 +204,21 @@ async function handleLeadImport(data: any, source?: string) {
         }
 
         const leadData: any = {
-          name: normalizedLead!.name,
-          phone: normalizedLead!.phone && normalizedLead.phone !== 'NO_PHONE' 
-            ? normalizedLead.phone 
+          name: normalizedLead.name,
+          phone: normalizedLead.phone && normalizedLead.phone !== 'NO_PHONE'
+            ? normalizedLead.phone
             : 'NO_PHONE',
-          address: normalizedLead!.address || null,
-          area: normalizedLead!.area || null,
-          city: normalizedLead!.city,
-          category: normalizedLead!.category,
+          address: normalizedLead.address || null,
+          area: normalizedLead.area || null,
+          city: normalizedLead.city,
+          category: normalizedLead.category,
           status: LeadStatus.SCRAPED,
           source: leadSource,
         }
 
         // Add email if provided
-        if (normalizedLead!.email) {
-          leadData.email = normalizedLead!.email
+        if (normalizedLead.email) {
+          leadData.email = normalizedLead.email
         }
 
         const createdLead = await tx.lead.create({

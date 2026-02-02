@@ -45,7 +45,7 @@ export async function POST(
     const totalPaid = order.payments.reduce((sum, p) => sum + p.amount, 0) + amount
 
     // Update order payment status
-    let newPaymentStatus = PaymentStatus.PENDING
+    let newPaymentStatus: PaymentStatus = PaymentStatus.PENDING
     if (totalPaid >= order.totalAmount) {
       newPaymentStatus = PaymentStatus.PAID
     } else if (totalPaid > 0) {

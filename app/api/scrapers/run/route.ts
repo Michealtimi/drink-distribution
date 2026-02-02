@@ -19,10 +19,17 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Support both single query and multiple queries
-    const queryValue = queries && Array.isArray(queries) && queries.length > 0 
-      ? queries.filter((q: string) => q && q.trim() !== '')
-      : (query || [])
+    // Support single query (string), multiple queries (array), or queries as comma/newline string
+    let queryValue: string | string[]
+    if (queries && Array.isArray(queries) && queries.length > 0) {
+      queryValue = queries.filter((q: string) => q != null && String(q).trim() !== '')
+    } else if (typeof queries === 'string' && queries.trim()) {
+      queryValue = queries.split(/[\n,]/).map((q) => q.trim()).filter(Boolean)
+    } else if (query != null && String(query).trim()) {
+      queryValue = String(query).trim()
+    } else {
+      queryValue = []
+    }
 
     if (!queryValue || (Array.isArray(queryValue) && queryValue.length === 0)) {
       return NextResponse.json(

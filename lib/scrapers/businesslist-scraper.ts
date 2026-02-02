@@ -59,7 +59,7 @@ export class BusinessListScraper extends BaseScraper {
 
         const lead: Partial<ScrapedLead> = {
           name: listing.name,
-          phone: listing.phone ? this.normalizePhone(listing.phone) : '2340000000000',
+          phone: listing.phone ? this.normalizePhone(listing.phone) : '',
           address: listing.address || undefined,
           area: this.extractArea(listing.address),
           city: this.config.city || City.LAGOS,

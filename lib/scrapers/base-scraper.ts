@@ -108,6 +108,9 @@ export abstract class BaseScraper {
   protected inferCategory(name: string, description?: string): CustomerType {
     const text = `${name} ${description || ''}`.toLowerCase()
     
+    if (text.match(/\b(distributor|distribution|distribute)\b/)) return CustomerType.DISTRIBUTOR
+    if (text.match(/\b(supplier|supplies|supply)\b/)) return CustomerType.SUPPLIER
+    if (text.match(/\b(consumer|buyer|end.?user|outlet)\b/)) return CustomerType.CONSUMER
     if (text.match(/\b(gym|fitness|workout|exercise)\b/)) return CustomerType.GYM
     if (text.match(/\b(event|venue|hall|center)\b/)) return CustomerType.EVENT_CENTER
     if (text.match(/\b(club|nightclub|bar)\b/)) return CustomerType.CLUB

@@ -10,7 +10,10 @@
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:studio": "prisma studio",
-    "db:migrate": "prisma migrate dev"
+    "db:migrate": "prisma migrate dev",
+    "playwright:install": "pnpm exec playwright install chromium",
+    "pw": "pnpm exec playwright install chromium",
+    "pw:check": "node scripts/check-playwright.js"
   },
   "dependencies": {
     "@prisma/client": "^5.7.1",
@@ -25,8 +28,10 @@
   },
   "devDependencies": {
     "@types/node": "^20.10.5",
+    "@types/node-cron": "^3.0.11",
     "@types/react": "^18.2.45",
     "@types/react-dom": "^18.2.18",
+    "i": "^0.3.7",
     "prisma": "^5.7.1",
     "typescript": "^5.3.3"
   }

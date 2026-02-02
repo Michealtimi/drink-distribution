@@ -12,6 +12,12 @@ export default function Navbar() {
     { href: '/customers', label: 'Customers' },
     { href: '/orders', label: 'Orders' },
     { href: '/routes', label: 'Routes' },
+    { href: '/suppliers', label: 'Suppliers' },
+    { href: '/products', label: 'Products' },
+    { href: '/businesses', label: 'Businesses' },
+    { href: '/follow-ups', label: 'Follow-ups' },
+    { href: '/templates', label: 'Templates' },
+    { href: '/imports', label: 'Imports' },
     { href: '/scrapers', label: 'Scrapers' },
     { href: '/analytics', label: 'Analytics' },
   ]

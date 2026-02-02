@@ -2,6 +2,10 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
+import ToastContainer, { useToast } from '../components/Toast'
+import LoadingSkeleton from '../components/LoadingSkeleton'
+import EmptyState from '../components/EmptyState'
+import SearchBar from '../components/SearchBar'
 
 interface Order {
   id: string
@@ -18,26 +22,60 @@ interface Order {
 
 export default function OrdersPage() {
   const [orders, setOrders] = useState<Order[]>([])
+  const [filteredOrders, setFilteredOrders] = useState<Order[]>([])
   const [loading, setLoading] = useState(true)
+  const [searchQuery, setSearchQuery] = useState<string>('')
+  const [error, setError] = useState<string | null>(null)
+  const { toasts, showToast, removeToast } = useToast()
 
   useEffect(() => {
     fetchOrders()
   }, [])
 
+  // Filter orders by search query
+  useEffect(() => {
+    if (!searchQuery.trim()) {
+      setFilteredOrders(orders)
+      return
+    }
+
+    const query = searchQuery.toLowerCase()
+    const filtered = orders.filter((order) => {
+      return (
+        order.orderNumber.toLowerCase().includes(query) ||
+        order.customer.name.toLowerCase().includes(query) ||
+        order.customer.phone.includes(query)
+      )
+    })
+    setFilteredOrders(filtered)
+  }, [searchQuery, orders])
+
   const fetchOrders = async () => {
     try {
       const response = await fetch('/api/orders')
+      if (!response.ok) {
+        throw new Error('Failed to fetch orders')
+      }
       const data = await response.json()
       setOrders(data)
+      setFilteredOrders(data)
+      setError(null)
     } catch (error) {
       console.error('Error fetching orders:', error)
+      setError('Failed to load orders. Please try again.')
+      showToast('Failed to load orders', 'error')
     } finally {
       setLoading(false)
     }
   }
 
   if (loading) {
-    return <div style={{ padding: '2rem' }}>Loading orders...</div>
+    return (
+      <>
+        <LoadingSkeleton rows={8} columns={7} />
+        <ToastContainer toasts={toasts} onRemove={removeToast} />
+      </>
+    )
   }
 
   const statusColors: Record<string, string> = {
@@ -68,7 +106,7 @@ export default function OrdersPage() {
       }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
-            <tr style={{ backgroundColor: '#f9fafb', borderBottom: '1px solid #e0e0e0' }}>
+            <tr style={{ backgroundColor: '#f9fafb', borderBottom: '1px solid #e0e0e0', position: 'sticky', top: 0, zIndex: 10 }}>
               <th style={{ padding: '1rem', textAlign: 'left', fontWeight: '600' }}>Order #</th>
               <th style={{ padding: '1rem', textAlign: 'left', fontWeight: '600' }}>Customer</th>
               <th style={{ padding: '1rem', textAlign: 'left', fontWeight: '600' }}>Amount</th>
@@ -79,8 +117,21 @@ export default function OrdersPage() {
             </tr>
           </thead>
           <tbody>
-            {orders.map((order) => (
-              <tr key={order.id} style={{ borderBottom: '1px solid #f3f4f6' }}>
+            {filteredOrders.map((order) => (
+              <tr 
+                key={order.id} 
+                style={{ 
+                  borderBottom: '1px solid #f3f4f6',
+                  transition: 'background-color 0.2s',
+                  cursor: 'pointer',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = '#f9fafb'
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = 'white'
+                }}
+              >
                 <td style={{ padding: '1rem' }}>{order.orderNumber}</td>
                 <td style={{ padding: '1rem' }}>
                   <div>{order.customer.name}</div>
@@ -135,10 +186,51 @@ export default function OrdersPage() {
           </tbody>
         </table>
 
-        {orders.length === 0 && (
-          <div style={{ padding: '3rem', textAlign: 'center', color: '#6b7280' }}>
-            No orders yet.
+        {error && (
+          <div style={{ padding: '2rem', textAlign: 'center' }}>
+            <div style={{ 
+              padding: '1rem', 
+              backgroundColor: '#fee2e2', 
+              color: '#991b1b', 
+              borderRadius: '6px',
+              marginBottom: '1rem',
+            }}>
+              {error}
+            </div>
+            <button
+              onClick={() => {
+                setError(null)
+                fetchOrders()
+              }}
+              style={{
+                padding: '0.75rem 1.5rem',
+                backgroundColor: '#3b82f6',
+                color: 'white',
+                borderRadius: '6px',
+                border: 'none',
+                cursor: 'pointer',
+                fontWeight: '500',
+              }}
+            >
+              Retry
+            </button>
           </div>
+        )}
+        {!error && filteredOrders.length === 0 && orders.length === 0 && (
+          <EmptyState
+            title="No orders yet"
+            description="Orders will appear here once customers place their first orders."
+            actionLabel="View Customers"
+            actionHref="/customers"
+            icon="📦"
+          />
+        )}
+        {!error && filteredOrders.length === 0 && orders.length > 0 && (
+          <EmptyState
+            title="No orders match your search"
+            description={`No orders found matching "${searchQuery}". Try adjusting your search.`}
+            icon="🔍"
+          />
         )}
       </div>
     </div>

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 
 export interface Toast {
   id: string
@@ -106,18 +106,18 @@ export default function ToastContainer({ toasts, onRemove }: ToastProps) {
   )
 }
 
-// Hook for managing toasts
+// Hook for managing toasts (stable callbacks so consumers can use them in useEffect deps)
 export function useToast() {
   const [toasts, setToasts] = useState<Toast[]>([])
 
-  const showToast = (message: string, type: Toast['type'] = 'info') => {
+  const showToast = useCallback((message: string, type: Toast['type'] = 'info') => {
     const id = Math.random().toString(36).substr(2, 9)
     setToasts((prev) => [...prev, { id, message, type }])
-  }
+  }, [])
 
-  const removeToast = (id: string) => {
+  const removeToast = useCallback((id: string) => {
     setToasts((prev) => prev.filter((t) => t.id !== id))
-  }
+  }, [])
 
   return { toasts, showToast, removeToast }
 }

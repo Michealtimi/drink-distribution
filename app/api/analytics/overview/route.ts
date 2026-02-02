@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { LeadStatus, PaymentStatus } from '@prisma/client'
+import { serviceUnavailable, internalError } from '@/lib/api-errors'
 
 export async function GET() {
   try {
@@ -44,7 +44,7 @@ export async function GET() {
       // Pending payments
       prisma.order.aggregate({
         where: {
-          paymentStatus: PaymentStatus.PENDING,
+          paymentStatus: 'PENDING',
         },
         _sum: {
           totalAmount: true,
@@ -94,47 +94,44 @@ export async function GET() {
       prisma.$queryRaw`
         SELECT 
           DATE_TRUNC('month', "createdAt") as month,
-          COUNT(*) as count,
-          SUM("totalAmount") as revenue
+          COUNT(*)::int as count,
+          COALESCE(SUM("totalAmount"), 0)::float as revenue
         FROM "Order"
         WHERE "createdAt" >= NOW() - INTERVAL '6 months'
         GROUP BY DATE_TRUNC('month', "createdAt")
         ORDER BY month DESC
       `,
 
-      // Revenue by city
-      prisma.order.findMany({
-        include: {
-          customer: {
-            select: {
-              city: true,
-            },
-          },
-          payments: true,
-        },
-      }),
+      // Revenue by city (aggregated in DB — no unbounded findMany)
+      prisma.$queryRaw<Array<{ city: string; revenue: number }>>`
+        SELECT c.city, COALESCE(SUM(p.amount), 0)::float as revenue
+        FROM "Payment" p
+        JOIN "Order" o ON o.id = p."orderId"
+        JOIN "Customer" c ON c.id = o."customerId"
+        GROUP BY c.city
+      `,
     ])
 
     // Calculate conversion rate
-    const customerLeads = leadsByStatus.find(s => s.status === LeadStatus.CUSTOMER || s.status === LeadStatus.REPEAT_CUSTOMER)
+    const customerLeads = leadsByStatus.find(s => s.status === 'CUSTOMER' || s.status === 'REPEAT_CUSTOMER')
     const conversionRate = totalLeads > 0 
       ? ((customerLeads?._count || 0) / totalLeads) * 100 
       : 0
 
     // Process orders by month
-    const ordersByMonthProcessed = (ordersByMonth as any[]).map((row: any) => ({
-      month: row.month.toISOString().substring(0, 7),
-      count: Number(row.count),
-      revenue: Number(row.revenue || 0),
-    }))
+    const ordersByMonthProcessed = (ordersByMonth as Array<{ month: Date; count: number; revenue: number }>).map(
+      (row) => ({
+        month: row.month.toISOString().substring(0, 7),
+        count: Number(row.count),
+        revenue: Number(row.revenue ?? 0),
+      })
+    )
 
-    // Process revenue by city
-    const revenueByCityProcessed = revenueByCity.reduce((acc: any, order) => {
-      const city = order.customer.city
-      const paid = order.payments.reduce((sum, p) => sum + p.amount, 0)
-      acc[city] = (acc[city] || 0) + paid
-      return acc
-    }, {})
+    // Revenue by city is already aggregated from DB
+    const revenueByCityProcessed: Record<string, number> = {}
+    for (const row of revenueByCity) {
+      revenueByCityProcessed[row.city] = Number(row.revenue ?? 0)
+    }
 
     return NextResponse.json({
       overview: {
@@ -170,11 +167,19 @@ export async function GET() {
         })),
       },
     })
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Error fetching analytics:', error)
-    return NextResponse.json(
-      { error: 'Failed to fetch analytics' },
-      { status: 500 }
-    )
+    const err = error instanceof Error ? error : new Error(String(error))
+    if (
+      err.name === 'PrismaClientInitializationError' ||
+      err.message?.includes("Can't reach database server")
+    ) {
+      return serviceUnavailable(
+        'Database connection failed',
+        'Unable to connect to the database. Please check your database connection settings.',
+        process.env.NODE_ENV === 'development' ? err.message : undefined
+      )
+    }
+    return internalError('Failed to fetch analytics', err.message)
   }
 }

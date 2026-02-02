@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { generateMessage, getWhatsAppLink } from '@/lib/message-generator'
 import { scheduleFollowUpsForLead } from '@/lib/follow-up-scheduler'
-import { LeadStatus } from '@prisma/client'
 
 export async function GET(
   request: NextRequest,
@@ -17,19 +16,20 @@ export async function GET(
       return NextResponse.json({ error: 'Lead not found' }, { status: 404 })
     }
 
-    const message = generateMessage(lead.status, {
+    const { content, fromTemplate } = await generateMessage(lead.status, {
       name: lead.name,
       category: lead.category,
       city: lead.city,
       area: lead.area || undefined,
     })
 
-    const whatsappLink = getWhatsAppLink(lead.phone, message)
+    const whatsappLink = getWhatsAppLink(lead.phone, content)
 
     return NextResponse.json({
-      message,
+      message: content,
       whatsappLink,
       phone: lead.phone,
+      fromTemplate,
     })
   } catch (error) {
     console.error('Error generating message:', error)
@@ -54,30 +54,31 @@ export async function POST(
     }
 
     // Update lead status to MESSAGED if not already
-    if (lead.status !== LeadStatus.MESSAGED && lead.status !== LeadStatus.INTERESTED) {
+    if (lead.status !== 'MESSAGED' && lead.status !== 'INTERESTED') {
       await prisma.lead.update({
         where: { id: params.id },
-        data: { status: LeadStatus.MESSAGED },
+        data: { status: 'MESSAGED' },
       })
 
       // Auto-schedule follow-ups
       await scheduleFollowUpsForLead(params.id)
     }
 
-    const message = generateMessage(LeadStatus.MESSAGED, {
+    const { content, fromTemplate } = await generateMessage('MESSAGED', {
       name: lead.name,
       category: lead.category,
       city: lead.city,
       area: lead.area || undefined,
     })
 
-    const whatsappLink = getWhatsAppLink(lead.phone, message)
+    const whatsappLink = getWhatsAppLink(lead.phone, content)
 
     return NextResponse.json({
-      message,
+      message: content,
       whatsappLink,
       phone: lead.phone,
       followUpsScheduled: true,
+      fromTemplate,
     })
   } catch (error) {
     console.error('Error marking as messaged:', error)

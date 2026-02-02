@@ -66,8 +66,9 @@ export default function LeadsPage() {
 
   const fetchLeadCounts = async () => {
     try {
-      const response = await fetch('/api/leads')
-      const allLeads = await response.json()
+      const response = await fetch('/api/leads?limit=500')
+      const json = await response.json()
+      const allLeads = Array.isArray(json) ? json : (json.data ?? [])
       const counts: Record<string, number> = {}
       allLeads.forEach((lead: Lead) => {
         counts[lead.status] = (counts[lead.status] || 0) + 1
@@ -87,11 +88,12 @@ export default function LeadsPage() {
       params.append('sortBy', sortBy)
       params.append('sortOrder', sortOrder)
 
-      const response = await fetch(`/api/leads?${params.toString()}`)
+      const response = await fetch(`/api/leads?${params.toString()}&limit=500`)
       if (!response.ok) {
         throw new Error('Failed to fetch leads')
       }
-      const data = await response.json()
+      const json = await response.json()
+      const data = Array.isArray(json) ? json : (json.data ?? [])
       setLeads(data)
       setFilteredLeads(data)
       setError(null)
@@ -183,6 +185,17 @@ export default function LeadsPage() {
     }
   }
 
+  const handleExportCsv = () => {
+    const params = new URLSearchParams()
+    params.set('format', 'csv')
+    if (filterStatus) params.set('status', filterStatus)
+    if (filterCity) params.set('city', filterCity)
+    if (filterCategory) params.set('category', filterCategory)
+    const url = `/api/leads/export?${params.toString()}`
+    window.open(url, '_blank', 'noopener,noreferrer')
+    showToast('Export started. File will download shortly.', 'success')
+  }
+
   const handleSelectLead = (leadId: string) => {
     const newSelected = new Set(selectedLeads)
     if (newSelected.has(leadId)) {
@@ -268,6 +281,20 @@ export default function LeadsPage() {
               {deleting === 'bulk' ? 'Deleting...' : `Delete Selected (${selectedLeads.size})`}
             </button>
           )}
+          <button
+            onClick={handleExportCsv}
+            style={{
+              padding: '0.75rem 1.5rem',
+              backgroundColor: '#0ea5e9',
+              color: 'white',
+              borderRadius: '6px',
+              fontWeight: '500',
+              border: 'none',
+              cursor: 'pointer',
+            }}
+          >
+            Export CSV
+          </button>
           <button
             onClick={handleViewScrapedLeads}
             style={{
@@ -368,6 +395,9 @@ export default function LeadsPage() {
           }}
         >
           <option value="">All Categories</option>
+          <option value="DISTRIBUTOR">Distributor</option>
+          <option value="SUPPLIER">Supplier</option>
+          <option value="CONSUMER">Consumer</option>
           <option value="GYM">Gym</option>
           <option value="EVENT_CENTER">Event Center</option>
           <option value="CLUB">Club</option>

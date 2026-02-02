@@ -24,6 +24,7 @@ export default function ScrapingJobPage() {
   const params = useParams()
   const [job, setJob] = useState<ScrapingJob | null>(null)
   const [loading, setLoading] = useState(true)
+  const [stopping, setStopping] = useState(false)
 
   useEffect(() => {
     if (params.jobId) {
@@ -42,11 +43,23 @@ export default function ScrapingJobPage() {
     try {
       const response = await fetch(`/api/scrapers/status/${params.jobId}`)
       const data = await response.json()
-      setJob(data)
+      setJob(response.ok ? data : null)
     } catch (error) {
       console.error('Error fetching job:', error)
+      setJob(null)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleStop = async () => {
+    if (!params.jobId || stopping) return
+    setStopping(true)
+    try {
+      const res = await fetch(`/api/scrapers/${params.jobId}/cancel`, { method: 'POST' })
+      if (res.ok) await fetchJob()
+    } finally {
+      setStopping(false)
     }
   }
 
@@ -129,6 +142,25 @@ export default function ScrapingJobPage() {
                 >
                   {job.status}
                 </span>
+                {(job.status === 'PENDING' || job.status === 'RUNNING') && (
+                  <button
+                    type="button"
+                    onClick={handleStop}
+                    disabled={stopping}
+                    style={{
+                      marginLeft: '1rem',
+                      padding: '0.5rem 1rem',
+                      backgroundColor: stopping ? '#9ca3af' : '#ef4444',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '6px',
+                      fontWeight: '500',
+                      cursor: stopping ? 'not-allowed' : 'pointer',
+                    }}
+                  >
+                    {stopping ? 'Stopping…' : 'Stop job'}
+                  </button>
+                )}
               </div>
             </div>
           </div>

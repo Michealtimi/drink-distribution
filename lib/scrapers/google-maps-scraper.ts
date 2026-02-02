@@ -142,11 +142,9 @@ export class GoogleMapsScraper extends BaseScraper {
       for (const listing of listings) {
         if (results.length >= (this.config.maxResults || 50)) break
 
-        // Normalize phone if available, otherwise use placeholder (phone is required in DB)
-        // Placeholder format: 2340000000000 (can be updated later)
-        const normalizedPhone = listing.phone && listing.phone.trim().length > 0 
-          ? this.normalizePhone(listing.phone) 
-          : '2340000000000' // Placeholder - indicates phone needs to be added manually
+        const normalizedPhone = listing.phone && listing.phone.trim().length > 0
+          ? this.normalizePhone(listing.phone)
+          : ''
         const lead: Partial<ScrapedLead> = {
           name: listing.name,
           phone: normalizedPhone,
@@ -159,7 +157,7 @@ export class GoogleMapsScraper extends BaseScraper {
         if (this.validateLead(lead)) {
           results.push(lead as ScrapedLead)
           validCount++
-          const phoneStatus = normalizedPhone === '2340000000000' ? 'NEEDS_PHONE' : 'HAS_PHONE'
+          const phoneStatus = !normalizedPhone ? 'NEEDS_PHONE' : 'HAS_PHONE'
           console.log(`[GoogleMapsScraper] ✓ Valid lead: ${lead.name} - ${phoneStatus}`)
         } else {
           invalidCount++

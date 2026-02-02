@@ -17,8 +17,7 @@ export async function processFollowUps() {
 
   for (const followUp of allFollowUps) {
     try {
-      // Generate message
-      const message = generateMessage(followUp.lead.status, {
+      const { content: message, fromTemplate } = await generateMessage(followUp.lead.status, {
         name: followUp.lead.name,
         category: followUp.lead.category,
         city: followUp.lead.city,
@@ -26,10 +25,12 @@ export async function processFollowUps() {
         followUpDay: getFollowUpDay(followUp.scheduledFor),
         isMonthEnd: isMonthEnd(followUp.scheduledFor),
       })
+      if (!fromTemplate) {
+        console.warn(`[FollowUp] Lead ${followUp.lead.id}: message from fallback (no template in DB)`)
+      }
 
       const whatsappLink = getWhatsAppLink(followUp.lead.phone, message)
 
-      // Update follow-up with generated message
       await prisma.followUp.update({
         where: { id: followUp.id },
         data: { message },

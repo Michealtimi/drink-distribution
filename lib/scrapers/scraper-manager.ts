@@ -6,8 +6,8 @@ import { DirectoryScraper } from './directory-scraper'
 import { BusinessListScraper } from './businesslist-scraper'
 import { FinelibScraper } from './finelib-scraper'
 import { BaseScraper, ScrapedLead } from './base-scraper'
-import { deduplicateLeads } from '../lead-deduplicator'
-import { LeadStatus } from '@prisma/client'
+import { loadExistingPhones, deduplicateLeads } from '../lead-deduplicator'
+import { batchImportLeads } from '../lead-import-pipeline'
 import { autoValidateScrapedLeads } from '../lead-validator'
 
 export interface ScrapingJobInput {
@@ -64,6 +64,8 @@ export class ScraperManager {
 
   private async executeScrapingJob(jobId: string, input: ScrapingJobInput): Promise<void> {
     try {
+      if (await this.isJobCancelled(jobId)) return
+
       // Update job status to running
       await prisma.scrapingJob.update({
         where: { id: jobId },
@@ -81,6 +83,12 @@ export class ScraperManager {
       let allScrapedLeads: ScrapedLead[] = []
 
       for (const query of queries) {
+        if (await this.isJobCancelled(jobId)) {
+          console.log(`[ScraperManager] Job ${jobId} cancelled, stopping.`)
+          await this.finishCancelledJob(jobId, allScrapedLeads.length)
+          if ('close' in scraper && typeof scraper.close === 'function') await scraper.close()
+          return
+        }
         console.log(`[ScraperManager] ========================================`)
         console.log(`[ScraperManager] Starting scrape for query: "${query}"`)
         console.log(`[ScraperManager] Scraper type: ${input.type}`)
@@ -98,40 +106,26 @@ export class ScraperManager {
         }
       }
 
+      if (await this.isJobCancelled(jobId)) {
+        await this.finishCancelledJob(jobId, allScrapedLeads.length)
+        if ('close' in scraper && typeof scraper.close === 'function') await scraper.close()
+        return
+      }
+
       console.log(`[ScraperManager] ========================================`)
       console.log(`[ScraperManager] Scraping Summary:`)
       console.log(`[ScraperManager] - Queries processed: ${queries.length}`)
       console.log(`[ScraperManager] - Total leads found: ${allScrapedLeads.length}`)
       console.log(`[ScraperManager] ========================================`)
 
-      // Deduplicate leads
-      const { unique, duplicates } = await deduplicateLeads(allScrapedLeads)
+      // Pre-load existing phones for O(1) dedup (avoids N DB round-trips)
+      const existingPhones = await loadExistingPhones(input.city ? [input.city] : undefined)
+      const { unique, duplicates } = await deduplicateLeads(allScrapedLeads, existingPhones)
       console.log(`[ScraperManager] After deduplication: ${unique.length} unique, ${duplicates.length} duplicates`)
 
-      // Import unique leads
-      const errors: string[] = []
-      let importedCount = 0
-
-      for (const lead of unique) {
-        try {
-          await prisma.lead.create({
-            data: {
-              name: lead.name,
-              phone: lead.phone,
-              address: lead.address || null,
-              area: lead.area || null,
-              city: lead.city,
-              category: lead.category,
-              status: LeadStatus.SCRAPED,
-              source: this.getSourceName(input.type),
-            },
-          })
-          importedCount++
-        } catch (error) {
-          const errorMsg = error instanceof Error ? error.message : String(error)
-          errors.push(`Failed to import ${lead.name}: ${errorMsg}`)
-        }
-      }
+      // Batch import unique leads (createMany in chunks)
+      const sourceName = this.getSourceName(input.type)
+      const { imported: importedCount, errors } = await batchImportLeads(unique, sourceName)
 
       // Auto-validate imported leads
       let validatedCount = 0
@@ -179,6 +173,17 @@ export class ScraperManager {
     }
   }
 
+  private async finishCancelledJob(jobId: string, leadsFoundSoFar: number): Promise<void> {
+    await prisma.scrapingJob.update({
+      where: { id: jobId },
+      data: {
+        status: ScrapingJobStatus.CANCELLED,
+        completedAt: new Date(),
+        leadsFound: leadsFoundSoFar,
+      },
+    })
+  }
+
   private getSourceName(type: ScraperType): string {
     switch (type) {
       case ScraperType.GOOGLE_MAPS:
@@ -202,6 +207,30 @@ export class ScraperManager {
     return await prisma.scrapingJob.findUnique({
       where: { id: jobId },
     })
+  }
+
+  /** Cancel a job if it is PENDING or RUNNING. Returns true if cancelled. */
+  async cancelJob(jobId: string): Promise<boolean> {
+    const job = await prisma.scrapingJob.findUnique({ where: { id: jobId } })
+    if (!job || (job.status !== ScrapingJobStatus.PENDING && job.status !== ScrapingJobStatus.RUNNING)) {
+      return false
+    }
+    await prisma.scrapingJob.update({
+      where: { id: jobId },
+      data: {
+        status: ScrapingJobStatus.CANCELLED,
+        completedAt: new Date(),
+      },
+    })
+    return true
+  }
+
+  private async isJobCancelled(jobId: string): Promise<boolean> {
+    const job = await prisma.scrapingJob.findUnique({
+      where: { id: jobId },
+      select: { status: true },
+    })
+    return job?.status === ScrapingJobStatus.CANCELLED
   }
 
   async getJobHistory(limit: number = 50) {

@@ -39,12 +39,18 @@ importers:
       '@types/node':
         specifier: ^20.10.5
         version: 20.19.30
+      '@types/node-cron':
+        specifier: ^3.0.11
+        version: 3.0.11
       '@types/react':
         specifier: ^18.2.45
         version: 18.3.27
       '@types/react-dom':
         specifier: ^18.2.18
         version: 18.3.7(@types/react@18.3.27)
+      i:
+        specifier: ^0.3.7
+        version: 0.3.7
       prisma:
         specifier: ^5.7.1
         version: 5.22.0
@@ -161,6 +167,9 @@ packages:
 
   '@types/keyv@3.1.4':
     resolution: {integrity: sha512-BQ5aZNSCpj7D6K2ksrRCTmKRLEpnPvWDiLPfoGyhZ++8YtiK9d/3DBKPJgry359X/P1PfruyYwvnvwFjuEiEIg==}
+
+  '@types/node-cron@3.0.11':
+    resolution: {integrity: sha512-0ikrnug3/IyneSHqCBeslAhlK2aBfYek1fGo4bP4QnZPmiqSGRK+Oy7ZMisLWkesffJvQ1cqAcBnJC+8+nxIAg==}
 
   '@types/node@20.19.30':
     resolution: {integrity: sha512-WJtwWJu7UdlvzEAUm484QNg5eAoq5QR08KDNx7g45Usrs2NtOPiX8ugDqmKdXkyL03rBqU5dYNYVQetEpBHq2g==}
@@ -302,6 +311,10 @@ packages:
   http2-wrapper@1.0.3:
     resolution: {integrity: sha512-V+23sDMr12Wnz7iTcDeJr3O6AIxlnvT/bmaAAAP/Xda35C90p9599p0F1eHR/N1KILWSoWVAiOMFjBBXaXSMxg==}
     engines: {node: '>=10.19.0'}
+
+  i@0.3.7:
+    resolution: {integrity: sha512-FYz4wlXgkQwIPqhzC5TdNMLSE5+GS1IIDJZY/1ZiEPCT2S3COUVZeT5OW4BmW4r5LHLQuOosSwsvnroG9GR59Q==}
+    engines: {node: '>=0.4'}
 
   inflight@1.0.6:
     resolution: {integrity: sha512-k92I/b08q4wvFscXCLvqfsHCrjrF7yiXsQuIVvVE7N82W3+aqpzuUdBbfhWcy/FZR3/4IgflMgKLOsvPDrGCJA==}
@@ -616,6 +629,8 @@ snapshots:
     dependencies:
       '@types/node': 20.19.30
 
+  '@types/node-cron@3.0.11': {}
+
   '@types/node@20.19.30':
     dependencies:
       undici-types: 6.21.0
@@ -772,6 +787,8 @@ snapshots:
     dependencies:
       quick-lru: 5.1.1
       resolve-alpn: 1.2.1
+
+  i@0.3.7: {}
 
   inflight@1.0.6:
     dependencies:

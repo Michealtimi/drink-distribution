@@ -19,26 +19,34 @@ A zero-budget CRM system for FMCG beverage distribution in Lagos and Abuja.
 
 ## Setup
 
-1. **Install dependencies**:
+1. **Install dependencies** (pnpm recommended):
    ```bash
-   npm install
+   pnpm install
    ```
 
-2. **Set up database**:
+2. **Install Playwright Chromium** (for internal scrapers):
+   ```bash
+   pnpm pw
+   ```
+   Verify: `pnpm pw:check`
+
+3. **Set up database**:
    - Create a PostgreSQL database (Supabase or Railway free tier)
    - Copy `.env.example` to `.env`
    - Update `DATABASE_URL` in `.env`
 
-3. **Initialize database**:
+4. **Initialize database**:
    ```bash
-   npx prisma generate
-   npx prisma db push
+   pnpm prisma generate
+   pnpm db push
    ```
 
-4. **Run development server**:
+5. **Run development server**:
    ```bash
-   npm run dev
+   pnpm dev
    ```
+
+See **AUDIT_AND_STRATEGY.md** for a full audit and run commands. See **INTERNAL_SCRAPERS.md** for scraper usage.
 
 ## Project Structure
 

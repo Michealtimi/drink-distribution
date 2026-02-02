@@ -1,13 +1,16 @@
 import { CustomerType } from '@prisma/client'
 
 export const CATEGORY_PRIORITY: Record<CustomerType, number> = {
-  GYM: 1,
-  EVENT_CENTER: 2,
-  CLUB: 3,
-  LOUNGE: 4,
-  OFFICE: 5,
-  SMALL_RETAILER: 6,
-  OTHER: 7,
+  DISTRIBUTOR: 1,
+  SUPPLIER: 2,
+  CONSUMER: 3,
+  GYM: 4,
+  EVENT_CENTER: 5,
+  CLUB: 6,
+  LOUNGE: 7,
+  OFFICE: 8,
+  SMALL_RETAILER: 9,
+  OTHER: 10,
 } as const
 
 export interface Lead {

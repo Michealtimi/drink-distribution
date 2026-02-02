@@ -9,6 +9,7 @@ export async function POST(
   try {
     const lead = await prisma.lead.findUnique({
       where: { id: params.id },
+      include: { customer: true },
     })
 
     if (!lead) {

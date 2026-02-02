@@ -58,7 +58,8 @@ export async function POST(request: NextRequest) {
         notes: notes || null,
         items: {
           create: items.map((item: any) => ({
-            productName: item.productName,
+            productId: item.productId || null,
+            productName: item.productName || null, // Keep for backward compatibility
             quantity: item.quantity,
             unitPrice: item.unitPrice,
             totalPrice: item.quantity * item.unitPrice,

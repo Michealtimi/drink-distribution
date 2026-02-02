@@ -180,6 +180,9 @@ export default function NewLeadPage() {
               fontSize: '1rem',
             }}
           >
+            <option value="DISTRIBUTOR">Distributor</option>
+            <option value="SUPPLIER">Supplier</option>
+            <option value="CONSUMER">Consumer</option>
             <option value="GYM">Gym</option>
             <option value="EVENT_CENTER">Event Center</option>
             <option value="CLUB">Club</option>

@@ -345,8 +345,8 @@ export async function POST(request: NextRequest) {
 
           const leadData: any = {
             name: normalizedLead!.name,
-            phone: normalizedLead!.phone && normalizedLead.phone !== 'NO_PHONE' 
-              ? normalizedLead.phone 
+            phone: normalizedLead!.phone && normalizedLead!.phone !== 'NO_PHONE' 
+              ? normalizedLead!.phone 
               : 'NO_PHONE', // Store placeholder if no phone
             address: normalizedLead!.address || null,
             area: normalizedLead!.area || null,
