@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, Suspense } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import ToastContainer, { useToast } from '../components/Toast'
@@ -23,7 +23,7 @@ interface Lead {
   createdAt: string
 }
 
-export default function LeadsPage() {
+function LeadsContent() {
   const [leads, setLeads] = useState<Lead[]>([])
   const [filteredLeads, setFilteredLeads] = useState<Lead[]>([])
   const [loading, setLoading] = useState(true)
@@ -723,5 +723,13 @@ export default function LeadsPage() {
         )}
       </div>
     </div>
+  )
+}
+
+export default function LeadsPage() {
+  return (
+    <Suspense fallback={<LoadingSkeleton />}>
+      <LeadsContent />
+    </Suspense>
   )
 }

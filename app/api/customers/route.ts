@@ -4,6 +4,8 @@ import { City } from '@prisma/client'
 import { internalError } from '@/lib/api-errors'
 import { parseListLimit } from '@/lib/validations/api-schemas'
 
+export const dynamic = 'force-dynamic'
+
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams

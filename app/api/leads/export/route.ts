@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { LeadStatus, City, CustomerType } from '@prisma/client'
 
+export const dynamic = 'force-dynamic'
+
 const EXPORT_LIMIT = 5000
 
 function escapeCsvField(value: string | null | undefined): string {

@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { ScraperManager } from '@/lib/scrapers/scraper-manager'
 import { timeout, internalError } from '@/lib/api-errors'
 
+export const dynamic = 'force-dynamic'
+
 const HISTORY_TIMEOUT_MS = 18_000
 
 export async function GET(request: NextRequest) {

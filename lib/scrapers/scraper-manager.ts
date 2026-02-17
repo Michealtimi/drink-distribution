@@ -78,7 +78,8 @@ export class ScraperManager {
     try {
       if (await this.isJobCancelled(jobId)) return
 
-      log.info('Scraping job started', { type: input.type, query: input.query })
+      const queryString = Array.isArray(input.query) ? input.query.join(', ') : input.query
+      log.info('Scraping job started', { type: input.type, query: queryString })
       // Update job status to running; clear live results for this job so UI shows fresh data
       clearJobScrapedLeads(jobId)
       await prisma.scrapingJob.update({
