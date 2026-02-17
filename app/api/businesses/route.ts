@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { City, CustomerType } from '@prisma/client'
+import { CustomerType } from '@prisma/client'
 import { badRequest, internalError } from '@/lib/api-errors'
 import { createBusinessSchema, parseListLimit } from '@/lib/validations/api-schemas'
 
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams
-    const city = searchParams.get('city') as City | null
-    const category = searchParams.get('category') as CustomerType | null
+    const city = searchParams.get('city') as string | null
+    const category = searchParams.get('category') as string | null
     const take = parseListLimit(searchParams)
 
     const businesses = await prisma.business.findMany({
