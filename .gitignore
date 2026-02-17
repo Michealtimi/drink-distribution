@@ -35,3 +35,7 @@ next-env.d.ts
 
 # prisma
 /prisma/migrations
+
+# whatsapp-web.js session (do not commit)
+.wwebjs_auth/
+.wwebjs_cache/

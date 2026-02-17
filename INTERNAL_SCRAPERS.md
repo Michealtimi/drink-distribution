@@ -2,11 +2,11 @@
 
 ## Goal
 
-Get **leads** (gyms, event centers, clubs, lounges, offices, small retailers) in **Lagos** or **Abuja** into the **Leads** list so you can message and convert them. Use **internal scrapers only** — no Axiom or Apify required.
+Get **leads** (gyms, event centers, clubs, lounges, offices, small retailers) in **Lagos** or **Abuja** into the **Leads** list so you can message and convert them. Use **internal scrapers only** (Playwright-based).
 
 ## How It Works
 
-1. **Internal scrapers** (Playwright) run on your machine: Finelib, Directory, Google Maps, BusinessList, Instagram, Facebook.
+1. **Internal scrapers** (Playwright) run on your machine: Finelib, Directory, Google Maps, Instagram, Facebook.
 2. You pick one or more scrapers, enter a **query** (e.g. `gym`, `event center`, `lounge`), choose **city** (Lagos/Abuja), then click **Start**.
 3. Jobs run in the background. Results are **deduplicated** and **imported** into Leads; optional **auto-validation** runs on imported leads.
 4. You use **Leads** and **Follow-ups** to message and convert.
@@ -40,7 +40,7 @@ Get **leads** (gyms, event centers, clubs, lounges, offices, small retailers) in
 - **Deduplication**: Leads without a phone no longer collapse into one duplicate; they’re deduped by name/area only.
 - **Missing phone**: All scrapers use empty string for missing phone (no placeholder); DB and deduplication handle it.
 - **Run API**: Accepts `query` or `queries` as string or array (including comma/newline-separated string).
-- **Scrapers page**: Internal scrapers are first and clearly recommended; Axiom and others are optional below.
+- **Scrapers page**: Internal scrapers (Playwright) are the primary way to collect leads.
 
 ## Recommended Queries (Sales Distribution)
 

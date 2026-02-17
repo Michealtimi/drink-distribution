@@ -9,16 +9,23 @@ export interface BatchImportResult {
   errors: string[]
 }
 
+export interface BatchImportOptions {
+  /** When true, set hasWhatsApp: true on all created leads (e.g. after WhatsApp check before import) */
+  defaultHasWhatsApp?: boolean
+}
+
 /**
  * Import a batch of scraped leads using createMany in chunks.
  * Reduces DB round-trips from O(N) to O(N / BATCH_SIZE).
  */
 export async function batchImportLeads(
   leads: ScrapedLead[],
-  source: string
+  source: string,
+  options?: BatchImportOptions
 ): Promise<BatchImportResult> {
   const errors: string[] = []
   let imported = 0
+  const hasWhatsAppDefault = options?.defaultHasWhatsApp ?? false
 
   for (let i = 0; i < leads.length; i += BATCH_SIZE) {
     const chunk = leads.slice(i, i + BATCH_SIZE)
@@ -31,6 +38,7 @@ export async function batchImportLeads(
       category: lead.category,
       status: LeadStatus.SCRAPED as LeadStatus,
       source,
+      hasWhatsApp: (lead as ScrapedLead & { hasWhatsApp?: boolean }).hasWhatsApp ?? hasWhatsAppDefault,
     }))
 
     try {
@@ -43,8 +51,8 @@ export async function batchImportLeads(
       const msg = err instanceof Error ? err.message : String(err)
       errors.push(`Batch ${Math.floor(i / BATCH_SIZE) + 1}: ${msg}`)
       // Optionally fall back to one-by-one for this chunk to salvage partial success
-      for (const lead of chunk) {
-        try {
+        for (const lead of chunk) {
+          try {
           await prisma.lead.create({
             data: {
               name: lead.name,
@@ -55,6 +63,7 @@ export async function batchImportLeads(
               category: lead.category,
               status: LeadStatus.SCRAPED,
               source,
+              hasWhatsApp: (lead as ScrapedLead & { hasWhatsApp?: boolean }).hasWhatsApp ?? hasWhatsAppDefault,
             },
           })
           imported++

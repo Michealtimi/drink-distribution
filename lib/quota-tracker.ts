@@ -1,9 +1,8 @@
 /**
  * Quota Tracker Utility
- * 
- * Estimates Axiom.ai quota usage based on leads imported.
- * Free tier: 2 hours runtime per month
- * Estimation: ~150 leads per hour (rough estimate)
+ *
+ * Estimates usage based on leads imported (e.g. for internal scrapers or future integrations).
+ * Optional: quota limit hours and leads-per-hour can be configured.
  */
 
 export interface QuotaUsage {

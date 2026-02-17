@@ -1,11 +1,20 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
-// No auth required – personal CRM, all routes open.
-// For production: add auth and protect /api/* (except cron) and dashboard routes.
-// Cron is protected by CRON_SECRET in app/api/cron/follow-ups/route.ts when set.
+const PIN_COOKIE = 'dashboard_pin_ok'
+
+// When DASHBOARD_PIN is set, require PIN cookie to access dashboard and API (except auth and cron).
+// When not set, all routes are open (personal project, no gate).
 export function middleware(request: NextRequest) {
-  return NextResponse.next()
+  const pin = process.env.DASHBOARD_PIN
+  if (!pin) return NextResponse.next()
+
+  const path = request.nextUrl.pathname
+  if (path === '/login' || path.startsWith('/api/auth/')) return NextResponse.next()
+  if (path.startsWith('/api/cron/')) return NextResponse.next()
+
+  if (request.cookies.get(PIN_COOKIE)?.value === '1') return NextResponse.next()
+  return NextResponse.redirect(new URL('/login', request.url))
 }
 
 export const config = {

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { OrderStatus, PaymentStatus } from '@prisma/client'
+import { notFound, badRequest, internalError } from '@/lib/api-errors'
+import { updateOrderSchema } from '@/lib/validations/api-schemas'
 
 export async function GET(
   request: NextRequest,
@@ -12,25 +13,15 @@ export async function GET(
       include: {
         customer: true,
         items: true,
-        payments: {
-          orderBy: {
-            paymentDate: 'desc',
-          },
-        },
+        payments: { orderBy: { paymentDate: 'desc' } },
       },
     })
 
-    if (!order) {
-      return NextResponse.json({ error: 'Order not found' }, { status: 404 })
-    }
-
+    if (!order) return notFound('Order not found')
     return NextResponse.json(order)
   } catch (error) {
     console.error('Error fetching order:', error)
-    return NextResponse.json(
-      { error: 'Failed to fetch order' },
-      { status: 500 }
-    )
+    return internalError('Failed to fetch order')
   }
 }
 
@@ -40,30 +31,26 @@ export async function PATCH(
 ) {
   try {
     const body = await request.json()
-    const { status, paymentStatus, deliveryDate, notes } = body
+    const parsed = updateOrderSchema.safeParse(body)
+    if (!parsed.success) return badRequest('Validation failed', parsed.error.flatten())
 
-    const updateData: any = {}
-    if (status) updateData.status = status as OrderStatus
-    if (paymentStatus !== undefined) updateData.paymentStatus = paymentStatus as PaymentStatus
-    if (deliveryDate !== undefined) updateData.deliveryDate = deliveryDate ? new Date(deliveryDate) : null
-    if (notes !== undefined) updateData.notes = notes
+    const { deliveryDate, ...rest } = parsed.data
+    const data = {
+      ...rest,
+      ...(deliveryDate !== undefined && { deliveryDate: deliveryDate ? new Date(deliveryDate) : null }),
+    }
 
     const order = await prisma.order.update({
       where: { id: params.id },
-      data: updateData,
-      include: {
-        customer: true,
-        items: true,
-        payments: true,
-      },
+      data,
+      include: { customer: true, items: true, payments: true },
     })
 
     return NextResponse.json(order)
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Error updating order:', error)
-    return NextResponse.json(
-      { error: 'Failed to update order' },
-      { status: 500 }
-    )
+    if (error && typeof error === 'object' && 'code' in error && (error as { code: string }).code === 'P2025')
+      return notFound('Order not found')
+    return internalError('Failed to update order')
   }
 }

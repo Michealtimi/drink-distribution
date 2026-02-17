@@ -1,5 +1,7 @@
 import { CustomerType, City, LeadStatus } from '@prisma/client'
 import { prisma } from './prisma'
+import { CATEGORY_DISPLAY_NAMES, CITY_DISPLAY_NAMES } from './constants/display-names'
+import { CATEGORY_MESSAGE_VARIANT } from './segment-config'
 
 interface MessageContext {
   name: string
@@ -11,106 +13,95 @@ interface MessageContext {
   isMonthEnd?: boolean
 }
 
-const categoryNames: Record<CustomerType, string> = {
-  DISTRIBUTOR: 'distributor',
-  SUPPLIER: 'supplier',
-  CONSUMER: 'consumer',
-  GYM: 'gym',
-  EVENT_CENTER: 'event center',
-  CLUB: 'club',
-  LOUNGE: 'lounge',
-  OFFICE: 'office',
-  SMALL_RETAILER: 'retailer',
-  OTHER: 'business',
+const cityNameForMessage = (city: City) => (city === City.LAGOS ? 'Lagos' : 'Abuja')
+
+/** Universal first message (best conversion — TARGET_SEGMENTS_AND_GO_TO_MARKET.md) */
+function universalFirstMessage(name: string, city: City): string {
+  const cityLabel = cityNameForMessage(city)
+  return `Hello ${name},
+
+I work with a beverage distribution team supplying energy drinks (Red Bull + alternatives) and event-focused drinks to businesses in ${cityLabel}.
+
+Most gyms, lounges, and event venues we speak with already have suppliers — but still experience stockouts during busy periods or last-minute demand.
+
+We're not asking you to switch.
+
+We simply support businesses as a reliable backup supplier for peak days and events.
+
+Would you be open to a small, zero-risk trial delivery so you have an alternative when demand spikes?`
 }
 
-const cityNames: Record<City, string> = {
-  LAGOS: 'Lagos',
-  ABUJA: 'Abuja',
+/** Nightclub / Lounge first message */
+function nightclubFirstMessage(name: string, area?: string): string {
+  const areaLabel = area ? area : 'your area'
+  return `Hi ${name},
+
+I supply energy drinks and cognac to lounges and event venues in ${areaLabel}.
+
+A lot of venues already have suppliers — but still lose sales on Friday/Saturday nights when stock runs out or delivery delays happen.
+
+We work as a backup supplier for peak nights, not a replacement.
+
+Would it help to have an extra supply option available when the bar is moving fast?`
+}
+
+/** Event planner first message */
+function eventPlannerFirstMessage(name: string): string {
+  return `Hello ${name},
+
+I support event planners and venues with energy drinks and cognac supply for weddings, concerts, and corporate events.
+
+We focus on last-minute reliability — when demand changes close to the event date.
+
+Would you like a supplier you can call when quantities increase unexpectedly?`
 }
 
 /**
- * Generate first outreach message
- * Sound: Human, Confident, Operationally credible
- * Emphasize: Reliability, No stock-outs, Trial delivery, Zero risk
+ * Generate first outreach message (cold WhatsApp).
+ * Uses segment-based copy from TARGET_SEGMENTS_AND_GO_TO_MARKET.md for best conversion.
  */
 export function generateFirstMessage(context: MessageContext): string {
   const { name, category, city, area } = context
-  const categoryName = categoryNames[category]
-  const cityName = cityNames[city]
-  const areaText = area ? ` in ${area}` : ''
+  const variant = CATEGORY_MESSAGE_VARIANT[category]
 
-  // Natural keyword integration - never forced
-  const cityKeyword = city === City.LAGOS ? 'Lagos' : 'Abuja'
-  
-  const messages = [
-    `Hi ${name}, I'm reaching out to ${categoryName}s${areaText} in ${cityName} about energy drink supply.`,
-
-    `We're a reliable energy drink distributor in ${cityName}, specializing in Red Bull and premium energy drinks for ${categoryName}s.`,
-
-    `What we offer: trial delivery of 24-48 cans, payment after delivery (within 48 hours), and consistent stock availability.`,
-
-    `No upfront payment required. We deliver, you pay after you've received the products.`,
-
-    `Would you like to schedule a trial delivery this week? I can confirm quantity and delivery day.`,
-  ]
-
-  return messages.join('\n\n')
+  if (variant === 'NIGHTCLUB') return nightclubFirstMessage(name, area)
+  if (variant === 'EVENT_PLANNER') return eventPlannerFirstMessage(name)
+  return universalFirstMessage(name, city)
 }
 
 /**
- * Generate follow-up message
- * Must: Be short, Be polite, Always propose a specific next step
+ * Generate follow-up message (Day 3–5 style — TARGET_SEGMENTS_AND_GO_TO_MARKET.md).
+ * Short, no pressure, soft yes/no.
  */
 export function generateFollowUpMessage(context: MessageContext): string {
-  const { name, category, city, followUpDay, isMonthEnd } = context
-  const categoryName = categoryNames[category]
-  const cityName = cityNames[city]
+  const { name, followUpDay, isMonthEnd } = context
+
+  const standardFollowUp = `Hi ${name}, just following up on my message.
+
+Even if you don't need anything now, we're happy to support as a backup supplier whenever demand increases.
+
+Would you be open to a small, zero-risk trial delivery so you have an alternative when demand spikes?`
 
   if (isMonthEnd) {
-    return `Hi ${name}, checking in before month-end. Still interested in energy drink supply for your ${categoryName}? We can schedule a trial delivery next week. What day works for you?`
+    return `Hi ${name}, checking in before month-end. Still open to having a backup drinks supplier? We can do a small trial whenever you're ready.`
   }
 
-  if (followUpDay === 2) {
-    return `Hi ${name}, following up on energy drink supply for your ${categoryName}. Ready to schedule a trial delivery? We can do 24-48 cans, payment after delivery. What day this week works?`
+  if (followUpDay === 2 || followUpDay === 5) {
+    return standardFollowUp
   }
 
-  if (followUpDay === 5) {
-    return `Hi ${name}, still interested in energy drinks? We're available for trial delivery in ${cityName} - 24-48 cans, pay after delivery. Let me know if you'd like to proceed.`
-  }
-
-  // Generic follow-up
-  return `Hi ${name}, checking in about energy drink supply. Ready to schedule a trial? We deliver 24-48 cans, payment after delivery. What day works for you?`
+  return standardFollowUp
 }
 
 /**
  * Replace template variables with actual values
  */
 function replaceVariables(template: string, context: MessageContext): string {
-  const categoryNames: Record<CustomerType, string> = {
-    DISTRIBUTOR: 'distributor',
-    SUPPLIER: 'supplier',
-    CONSUMER: 'consumer',
-    GYM: 'gym',
-    EVENT_CENTER: 'event center',
-    CLUB: 'club',
-    LOUNGE: 'lounge',
-    OFFICE: 'office',
-    SMALL_RETAILER: 'retailer',
-    OTHER: 'business',
-  }
-
-  const cityNames: Record<City, string> = {
-    LAGOS: 'Lagos',
-    ABUJA: 'Abuja',
-  }
-
   let result = template
   result = result.replace(/\{\{name\}\}/g, context.name)
-  result = result.replace(/\{\{category\}\}/g, categoryNames[context.category])
-  result = result.replace(/\{\{city\}\}/g, cityNames[context.city])
+  result = result.replace(/\{\{category\}\}/g, CATEGORY_DISPLAY_NAMES[context.category])
+  result = result.replace(/\{\{city\}\}/g, CITY_DISPLAY_NAMES[context.city])
   result = result.replace(/\{\{area\}\}/g, context.area || '')
-  
   return result
 }
 

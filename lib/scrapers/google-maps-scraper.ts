@@ -93,8 +93,9 @@ export class GoogleMapsScraper extends BaseScraper {
               try {
                 // Open place details in new tab
                 const detailPage = await this.browser!.newPage()
-                await detailPage.goto(listing.link, { waitUntil: 'networkidle', timeout: 15000 })
-                await this.delay(2000)
+                // Use 'domcontentloaded' and longer timeout — place pages often never reach 'networkidle'
+                await detailPage.goto(listing.link, { waitUntil: 'domcontentloaded', timeout: 25000 })
+                await this.delay(2500)
                 
                 // Try to find phone number
                 const phone = await detailPage.evaluate(() => {

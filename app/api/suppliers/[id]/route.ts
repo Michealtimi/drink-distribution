@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { City } from '@prisma/client'
+import { notFound, badRequest, internalError } from '@/lib/api-errors'
+import { updateSupplierSchema } from '@/lib/validations/api-schemas'
 
 export async function GET(
   request: NextRequest,
@@ -16,20 +17,11 @@ export async function GET(
       },
     })
 
-    if (!supplier) {
-      return NextResponse.json(
-        { error: 'Supplier not found' },
-        { status: 404 }
-      )
-    }
-
+    if (!supplier) return notFound('Supplier not found')
     return NextResponse.json(supplier)
   } catch (error) {
     console.error('Error fetching supplier:', error)
-    return NextResponse.json(
-      { error: 'Failed to fetch supplier' },
-      { status: 500 }
-    )
+    return internalError('Failed to fetch supplier')
   }
 }
 
@@ -39,30 +31,30 @@ export async function PUT(
 ) {
   try {
     const body = await request.json()
-    const { name, contactName, phone, email, address, city, products, notes, isActive } = body
+    const parsed = updateSupplierSchema.safeParse(body)
+    if (!parsed.success) return badRequest('Validation failed', parsed.error.flatten())
 
     const supplier = await prisma.supplier.update({
       where: { id: params.id },
       data: {
-        ...(name && { name }),
-        ...(contactName !== undefined && { contactName }),
-        ...(phone && { phone }),
-        ...(email !== undefined && { email }),
-        ...(address !== undefined && { address }),
-        ...(city !== undefined && { city: city || null }),
-        ...(products !== undefined && { products }),
-        ...(notes !== undefined && { notes }),
-        ...(isActive !== undefined && { isActive }),
+        ...(parsed.data.name != null && { name: parsed.data.name }),
+        ...(parsed.data.contactName !== undefined && { contactName: parsed.data.contactName ?? null }),
+        ...(parsed.data.phone != null && { phone: parsed.data.phone }),
+        ...(parsed.data.email !== undefined && { email: parsed.data.email ?? null }),
+        ...(parsed.data.address !== undefined && { address: parsed.data.address ?? null }),
+        ...(parsed.data.city !== undefined && { city: parsed.data.city ?? null }),
+        ...(parsed.data.products !== undefined && { products: parsed.data.products }),
+        ...(parsed.data.notes !== undefined && { notes: parsed.data.notes ?? null }),
+        ...(parsed.data.isActive !== undefined && { isActive: parsed.data.isActive }),
       },
     })
 
     return NextResponse.json(supplier)
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Error updating supplier:', error)
-    return NextResponse.json(
-      { error: 'Failed to update supplier' },
-      { status: 500 }
-    )
+    if (error && typeof error === 'object' && 'code' in error && (error as { code: string }).code === 'P2025')
+      return notFound('Supplier not found')
+    return internalError('Failed to update supplier')
   }
 }
 
@@ -71,16 +63,12 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
-    await prisma.supplier.delete({
-      where: { id: params.id },
-    })
-
+    await prisma.supplier.delete({ where: { id: params.id } })
     return NextResponse.json({ success: true })
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Error deleting supplier:', error)
-    return NextResponse.json(
-      { error: 'Failed to delete supplier' },
-      { status: 500 }
-    )
+    if (error && typeof error === 'object' && 'code' in error && (error as { code: string }).code === 'P2025')
+      return notFound('Supplier not found')
+    return internalError('Failed to delete supplier')
   }
 }

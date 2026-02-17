@@ -23,12 +23,13 @@ export async function GET(
       area: lead.area || undefined,
     })
 
-    const whatsappLink = getWhatsAppLink(lead.phone, content)
+    const hasPhone = lead.phone && lead.phone !== 'NO_PHONE'
+    const whatsappLink = hasPhone ? getWhatsAppLink(lead.phone, content) : ''
 
     return NextResponse.json({
       message: content,
       whatsappLink,
-      phone: lead.phone,
+      phone: lead.phone || '',
       fromTemplate,
     })
   } catch (error) {
@@ -71,12 +72,13 @@ export async function POST(
       area: lead.area || undefined,
     })
 
-    const whatsappLink = getWhatsAppLink(lead.phone, content)
+    const hasPhone = lead.phone && lead.phone !== 'NO_PHONE'
+    const whatsappLink = hasPhone ? getWhatsAppLink(lead.phone, content) : ''
 
     return NextResponse.json({
       message: content,
       whatsappLink,
-      phone: lead.phone,
+      phone: lead.phone || '',
       followUpsScheduled: true,
       fromTemplate,
     })

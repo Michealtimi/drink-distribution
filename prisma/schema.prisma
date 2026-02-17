@@ -332,20 +332,21 @@ model RouteCustomer {
 }
 
 model ScrapingJob {
-  id            String            @id @default(cuid())
-  type          ScraperType
-  status        ScrapingJobStatus @default(PENDING)
-  query         String?
-  city          City?
-  category      CustomerType?
-  leadsFound    Int               @default(0)
-  leadsImported Int               @default(0)
-  duplicates    Int               @default(0)
-  errors        String?           // JSON array of error messages
-  startedAt     DateTime?
-  completedAt   DateTime?
-  createdAt     DateTime          @default(now())
-  updatedAt     DateTime          @updatedAt
+  id              String            @id @default(cuid())
+  type            ScraperType
+  status          ScrapingJobStatus @default(PENDING)
+  query           String?
+  city            City?
+  category        CustomerType?
+  leadsFound      Int               @default(0)
+  leadsImported   Int               @default(0)
+  duplicates      Int               @default(0)
+  errors          String?           // JSON array of error messages
+  scrapedResults  Json?             // Live list of scraped rows as { name, phone, address?, area?, city, category }[]
+  startedAt       DateTime?
+  completedAt     DateTime?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
 
   @@index([status])
   @@index([type])

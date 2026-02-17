@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import BackButton from '../../components/BackButton'
+import ToastContainer, { useToast } from '../../components/Toast'
 
 interface Lead {
   id: string
@@ -35,16 +36,24 @@ export default function LeadDetailPage() {
   const [messageData, setMessageData] = useState<MessageData | null>(null)
   const [showMessage, setShowMessage] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [marking, setMarking] = useState(false)
+  const [generating, setGenerating] = useState(false)
+  const { toasts, showToast, removeToast } = useToast()
+
+  const leadId = typeof params.id === 'string' ? params.id : params.id?.[0]
 
   useEffect(() => {
-    if (params.id) {
+    if (leadId) {
       fetchLead()
+    } else {
+      setLoading(false)
     }
-  }, [params.id])
+  }, [leadId])
 
   const fetchLead = async () => {
+    if (!leadId) return
     try {
-      const response = await fetch(`/api/leads/${params.id}`)
+      const response = await fetch(`/api/leads/${leadId}`)
       const data = await response.json()
       setLead(data)
     } catch (error) {
@@ -55,13 +64,26 @@ export default function LeadDetailPage() {
   }
 
   const generateMessage = async () => {
+    if (!leadId) return
+    setGenerating(true)
     try {
-      const response = await fetch(`/api/leads/${params.id}/message`)
+      const response = await fetch(`/api/leads/${leadId}/message`)
       const data = await response.json()
-      setMessageData(data)
+      if (!response.ok) {
+        showToast(data?.error || 'Failed to generate message', 'error')
+        return
+      }
+      if (!data.message) {
+        showToast('No message returned', 'error')
+        return
+      }
+      setMessageData({ message: data.message, whatsappLink: data.whatsappLink || '', phone: data.phone || '' })
       setShowMessage(true)
     } catch (error) {
       console.error('Error generating message:', error)
+      showToast('Failed to generate message. Check the console.', 'error')
+    } finally {
+      setGenerating(false)
     }
   }
 
@@ -73,9 +95,31 @@ export default function LeadDetailPage() {
     }
   }
 
-  const updateStatus = async (newStatus: string) => {
+  const markAsMessaged = async () => {
+    if (!leadId) return
+    setMarking(true)
     try {
-      const response = await fetch(`/api/leads/${params.id}`, {
+      const res = await fetch(`/api/leads/${leadId}/message`, { method: 'POST' })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        showToast(data?.error || 'Failed to mark as messaged', 'error')
+        return
+      }
+      showToast('Lead marked as messaged. Follow-ups scheduled for Day 2, Day 5, and month-end.', 'success')
+      setLead((prev) => (prev ? { ...prev, status: 'MESSAGED' } : null))
+      setShowMessage(false)
+      setMessageData(null)
+    } catch {
+      showToast('Failed to mark as messaged', 'error')
+    } finally {
+      setMarking(false)
+    }
+  }
+
+  const updateStatus = async (newStatus: string) => {
+    if (!leadId) return
+    try {
+      const response = await fetch(`/api/leads/${leadId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus }),
@@ -88,8 +132,9 @@ export default function LeadDetailPage() {
   }
 
   const convertToCustomer = async () => {
+    if (!leadId) return
     try {
-      const response = await fetch(`/api/leads/${params.id}/convert`, {
+      const response = await fetch(`/api/leads/${leadId}/convert`, {
         method: 'POST',
       })
       const data = await response.json()
@@ -120,6 +165,7 @@ export default function LeadDetailPage() {
 
   return (
     <div style={{ padding: '2rem', maxWidth: '1000px', margin: '0 auto' }}>
+      <ToastContainer toasts={toasts} onRemove={removeToast} />
       <div style={{ marginBottom: '2rem' }}>
         <BackButton href="/leads" label="Back to Leads" />
         <h1 style={{ fontSize: '2rem', fontWeight: 'bold', marginTop: '0.5rem' }}>
@@ -197,19 +243,25 @@ export default function LeadDetailPage() {
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-            <button
-              onClick={generateMessage}
-              style={{
-                padding: '0.75rem',
-                backgroundColor: '#10b981',
-                color: 'white',
-                borderRadius: '6px',
-                fontWeight: '500',
-                textAlign: 'left',
-              }}
-            >
-              Generate Message
-            </button>
+            {(lead.status === 'VERIFIED' || lead.status === 'MESSAGED' || lead.status === 'SCRAPED' || lead.status === 'UNVERIFIED' || lead.status === 'INTERESTED') && (
+              <button
+                type="button"
+                onClick={generateMessage}
+                disabled={generating}
+                style={{
+                  padding: '0.75rem 1rem',
+                  backgroundColor: generating ? '#9ca3af' : '#25d366',
+                  color: 'white',
+                  borderRadius: '6px',
+                  fontWeight: '600',
+                  textAlign: 'left',
+                  border: 'none',
+                  cursor: generating ? 'not-allowed' : 'pointer',
+                }}
+              >
+                {generating ? 'Generating…' : 'Message this lead'}
+              </button>
+            )}
 
             <select
               value={lead.status}
@@ -270,11 +322,11 @@ export default function LeadDetailPage() {
           backgroundColor: 'white',
           padding: '1.5rem',
           borderRadius: '8px',
-          border: '1px solid #e0e0e0',
+          border: '2px solid #25d366',
           marginBottom: '2rem',
         }}>
           <h2 style={{ marginBottom: '1rem', fontSize: '1.25rem', fontWeight: '600' }}>
-            Generated Message
+            Message preview
           </h2>
           <div style={{
             padding: '1rem',
@@ -286,7 +338,7 @@ export default function LeadDetailPage() {
           }}>
             {messageData.message}
           </div>
-          <div style={{ display: 'flex', gap: '1rem' }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', alignItems: 'center' }}>
             <button
               onClick={copyMessage}
               style={{
@@ -295,25 +347,49 @@ export default function LeadDetailPage() {
                 color: 'white',
                 borderRadius: '6px',
                 fontWeight: '500',
+                border: 'none',
+                cursor: 'pointer',
               }}
             >
-              {copied ? 'Copied!' : 'Copy Message'}
+              {copied ? 'Copied!' : 'Copy message'}
             </button>
-            <a
-              href={messageData.whatsappLink}
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{
-                padding: '0.75rem 1.5rem',
-                backgroundColor: '#25d366',
-                color: 'white',
-                borderRadius: '6px',
-                fontWeight: '500',
-                display: 'inline-block',
-              }}
-            >
-              Open WhatsApp
-            </a>
+            {messageData.whatsappLink ? (
+              <a
+                href={messageData.whatsappLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  padding: '0.75rem 1.5rem',
+                  backgroundColor: '#25d366',
+                  color: 'white',
+                  borderRadius: '6px',
+                  fontWeight: '500',
+                  display: 'inline-block',
+                  textDecoration: 'none',
+                }}
+              >
+                Open WhatsApp
+              </a>
+            ) : (
+              <span style={{ fontSize: '0.875rem', color: '#6b7280' }}>No phone number – copy message and send manually</span>
+            )}
+            {lead.status !== 'MESSAGED' && (
+              <button
+                onClick={markAsMessaged}
+                disabled={marking}
+                style={{
+                  padding: '0.75rem 1.5rem',
+                  backgroundColor: marking ? '#9ca3af' : '#3b82f6',
+                  color: 'white',
+                  borderRadius: '6px',
+                  fontWeight: '600',
+                  border: 'none',
+                  cursor: marking ? 'not-allowed' : 'pointer',
+                }}
+              >
+                {marking ? 'Updating…' : "I've sent it – mark as messaged"}
+              </button>
+            )}
           </div>
         </div>
       )}

@@ -1,6 +1,7 @@
 import { chromium, Browser } from 'playwright'
 import { BaseScraper, ScrapedLead, ScraperConfig } from './base-scraper'
 import { City } from '@prisma/client'
+import { parsePhoneAndAddress } from '@/lib/parse-contact-block'
 
 /**
  * Generic directory scraper. Uses Finelib city/category URLs for reliable results.
@@ -87,7 +88,7 @@ export class DirectoryScraper extends BaseScraper {
         await this.browser.close()
         this.browser = null
       }
-      console.log(`[DirectoryScraper] Total leads: ${results.length}`)
+      console.log(`[DirectoryScraper] Total valid leads: ${results.length}`)
     } catch (error) {
       this.handleError(error, 'scrape')
       if (this.browser) {

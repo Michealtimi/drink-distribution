@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { normalizePhone } from '@/lib/phone-utils'
 
 /**
  * Extract emails and phone numbers from text (post-processing layer).
@@ -25,12 +26,4 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     )
   }
-}
-
-function normalizePhone(raw: string): string {
-  const digits = raw.replace(/\D/g, '')
-  if (digits.startsWith('234')) return digits.slice(0, 13)
-  if (digits.startsWith('0')) return '234' + digits.slice(1, 11)
-  if (digits.length >= 10) return '234' + digits.slice(-10)
-  return digits
 }

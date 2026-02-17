@@ -1,6 +1,7 @@
 import { chromium, Browser } from 'playwright'
 import { BaseScraper, ScrapedLead, ScraperConfig } from './base-scraper'
 import { City, CustomerType } from '@prisma/client'
+import { parsePhoneAndAddress } from '@/lib/parse-contact-block'
 
 /**
  * Map search query to Finelib category path (city + category).
@@ -112,18 +113,24 @@ export class FinelibScraper extends BaseScraper {
           return out.slice(0, 50)
         })
 
-        console.log(`[FinelibScraper] Path ${path}: found ${listings.length} listings`)
+        const rawCount = listings.length
+        console.log(`[FinelibScraper] Path ${path}: raw listings=${rawCount}`)
 
         for (const listing of listings) {
           if (results.length >= (this.config.maxResults || 50)) break
 
+          const combined = [listing.address, listing.phone].filter(Boolean).join(' ')
+          const { phone: parsedPhone, address: parsedAddress } = parsePhoneAndAddress(combined)
+          const phone = parsedPhone ? this.normalizePhone(parsedPhone) : (listing.phone ? this.normalizePhone(listing.phone) : '')
+          const address = parsedAddress || listing.address || undefined
+
           const lead: Partial<ScrapedLead> = {
             name: listing.name,
-            phone: listing.phone ? this.normalizePhone(listing.phone) : '',
-            address: listing.address || undefined,
-            area: this.extractArea(listing.address),
+            phone,
+            address: address || undefined,
+            area: this.extractArea(address || listing.address),
             city,
-            category: this.inferCategory(listing.name, listing.address),
+            category: this.inferCategory(listing.name, address || listing.address),
           }
 
           if (this.validateLead(lead)) {
@@ -131,6 +138,7 @@ export class FinelibScraper extends BaseScraper {
           }
           await this.delay(200)
         }
+        console.log(`[FinelibScraper] Path ${path}: valid leads so far=${results.length}`)
 
         await this.delay(2000)
       }

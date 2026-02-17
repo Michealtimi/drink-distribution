@@ -1,4 +1,5 @@
 import { City, CustomerType } from '@prisma/client'
+import { normalizePhone as normalizePhoneUtil } from '@/lib/phone-utils'
 
 export interface ScrapedLead {
   name: string
@@ -63,22 +64,10 @@ export abstract class BaseScraper {
   }
 
   /**
-   * Normalize phone number to Nigerian format
+   * Normalize phone number to Nigerian format (234 + 10 digits)
    */
   protected normalizePhone(phone: string): string {
-    // Remove all non-digits
-    let cleaned = phone.replace(/\D/g, '')
-    
-    // Handle Nigerian formats
-    if (cleaned.startsWith('234')) {
-      cleaned = cleaned.substring(3)
-    }
-    if (cleaned.startsWith('0')) {
-      cleaned = cleaned.substring(1)
-    }
-    
-    // Return with country code
-    return `234${cleaned}`
+    return normalizePhoneUtil(phone)
   }
 
   /**

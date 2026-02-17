@@ -1,8 +1,9 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import Link from 'next/link'
-import ToastContainer, { useToast, Toast } from '../components/Toast'
+import { useSearchParams } from 'next/navigation'
+import ToastContainer, { useToast } from '../components/Toast'
 import LoadingSkeleton from '../components/LoadingSkeleton'
 import EmptyState from '../components/EmptyState'
 import SearchBar from '../components/SearchBar'
@@ -26,8 +27,9 @@ export default function LeadsPage() {
   const [leads, setLeads] = useState<Lead[]>([])
   const [filteredLeads, setFilteredLeads] = useState<Lead[]>([])
   const [loading, setLoading] = useState(true)
-  const [filterStatus, setFilterStatus] = useState<string>('')
-  const [filterCity, setFilterCity] = useState<string>('')
+  const searchParams = useSearchParams()
+  const [filterStatus, setFilterStatus] = useState<string>(() => searchParams.get('status') ?? '')
+  const [filterCity, setFilterCity] = useState<string>(() => searchParams.get('city') ?? '')
   const [filterCategory, setFilterCategory] = useState<string>('')
   const [searchQuery, setSearchQuery] = useState<string>('')
   const [sortBy, setSortBy] = useState<string>('priority')
@@ -37,11 +39,26 @@ export default function LeadsPage() {
   const [selectedLeads, setSelectedLeads] = useState<Set<string>>(new Set())
   const [leadCounts, setLeadCounts] = useState<Record<string, number>>({})
   const [error, setError] = useState<string | null>(null)
+  const [bulkMarking, setBulkMarking] = useState(false)
+
+  // Sync URL when filters change so dashboard "View Leads" opens with right filter
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    if (filterStatus) params.set('status', filterStatus)
+    else params.delete('status')
+    if (filterCity) params.set('city', filterCity)
+    else params.delete('city')
+    const qs = params.toString()
+    const newPath = `${window.location.pathname}${qs ? `?${qs}` : ''}`
+    if (window.location.pathname + (window.location.search || '') !== newPath) {
+      window.history.replaceState(null, '', newPath)
+    }
+  }, [filterStatus, filterCity])
+
   const { toasts, showToast, removeToast } = useToast()
 
   useEffect(() => {
     fetchLeads()
-    fetchLeadCounts()
   }, [filterStatus, filterCity, filterCategory, sortBy, sortOrder])
 
   // Filter leads by search query
@@ -64,21 +81,6 @@ export default function LeadsPage() {
     setFilteredLeads(filtered)
   }, [searchQuery, leads])
 
-  const fetchLeadCounts = async () => {
-    try {
-      const response = await fetch('/api/leads?limit=500')
-      const json = await response.json()
-      const allLeads = Array.isArray(json) ? json : (json.data ?? [])
-      const counts: Record<string, number> = {}
-      allLeads.forEach((lead: Lead) => {
-        counts[lead.status] = (counts[lead.status] || 0) + 1
-      })
-      setLeadCounts(counts)
-    } catch (error) {
-      console.error('Error fetching lead counts:', error)
-    }
-  }
-
   const fetchLeads = async () => {
     try {
       const params = new URLSearchParams()
@@ -87,8 +89,10 @@ export default function LeadsPage() {
       if (filterCategory) params.append('category', filterCategory)
       params.append('sortBy', sortBy)
       params.append('sortOrder', sortOrder)
+      params.append('limit', '500')
+      params.append('includeCounts', 'true')
 
-      const response = await fetch(`/api/leads?${params.toString()}&limit=500`)
+      const response = await fetch(`/api/leads?${params.toString()}`)
       if (!response.ok) {
         throw new Error('Failed to fetch leads')
       }
@@ -96,6 +100,7 @@ export default function LeadsPage() {
       const data = Array.isArray(json) ? json : (json.data ?? [])
       setLeads(data)
       setFilteredLeads(data)
+      if (json.counts != null) setLeadCounts(json.counts)
       setError(null)
     } catch (error) {
       console.error('Error fetching leads:', error)
@@ -106,28 +111,52 @@ export default function LeadsPage() {
     }
   }
 
-  const handleViewScrapedLeads = () => {
-    setFilterStatus('SCRAPED')
-  }
-
   const handleAutoValidate = async () => {
     setValidating(true)
     try {
-      const response = await fetch('/api/leads/validate', { method: 'POST' })
+      const response = await fetch('/api/leads/validate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      })
       const result = await response.json()
       if (result.success) {
-        showToast(
-          `Validation complete: ${result.verified} verified, ${result.invalid} invalid`,
-          'success'
-        )
-        fetchLeads() // Refresh the list
-        fetchLeadCounts()
+        showToast(result.message || `Validated: ${result.verified} verified, ${result.invalid} invalid`, 'success')
+        fetchLeads()
       } else {
-        showToast('Validation failed: ' + (result.error || 'Unknown error'), 'error')
+        showToast(result.message || result.error || 'Validation failed', 'error')
       }
     } catch (error) {
       console.error('Error validating leads:', error)
       showToast('Failed to validate leads', 'error')
+    } finally {
+      setValidating(false)
+    }
+  }
+
+  const handleValidateSelected = async () => {
+    if (selectedLeads.size === 0) {
+      showToast('Select at least one lead to validate', 'warning')
+      return
+    }
+    setValidating(true)
+    try {
+      const response = await fetch('/api/leads/validate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ leadIds: [...selectedLeads] }),
+      })
+      const result = await response.json()
+      if (result.success) {
+        showToast(result.message || `Validated ${result.validated}: ${result.verified} verified, ${result.invalid} invalid`, 'success')
+        setSelectedLeads(new Set())
+        fetchLeads()
+      } else {
+        showToast(result.error || 'Validation failed', 'error')
+      }
+    } catch (error) {
+      console.error('Error validating selected:', error)
+      showToast('Failed to validate selected leads', 'error')
     } finally {
       setValidating(false)
     }
@@ -144,7 +173,6 @@ export default function LeadsPage() {
       if (response.ok) {
         showToast('Lead deleted successfully', 'success')
         fetchLeads()
-        fetchLeadCounts()
         setSelectedLeads(new Set())
       } else {
         showToast('Failed to delete lead', 'error')
@@ -175,7 +203,6 @@ export default function LeadsPage() {
       await Promise.all(deletePromises)
       showToast(`Successfully deleted ${selectedLeads.size} lead(s)`, 'success')
       fetchLeads()
-      fetchLeadCounts()
       setSelectedLeads(new Set())
     } catch (error) {
       console.error('Error deleting leads:', error)
@@ -207,10 +234,42 @@ export default function LeadsPage() {
   }
 
   const handleSelectAll = () => {
-    if (selectedLeads.size === leads.length) {
+    const list = filteredLeads
+    if (selectedLeads.size === list.length && list.length > 0) {
       setSelectedLeads(new Set())
     } else {
-      setSelectedLeads(new Set(leads.map((l) => l.id)))
+      setSelectedLeads(new Set(list.map((l) => l.id)))
+    }
+  }
+
+  const selectedVerifiedCount = useMemo(() => {
+    return filteredLeads.filter((l) => selectedLeads.has(l.id) && l.status === 'VERIFIED').length
+  }, [filteredLeads, selectedLeads])
+
+  const handleBulkMarkAsMessaged = async () => {
+    if (selectedVerifiedCount === 0) {
+      showToast('Select Verified leads to mark as messaged', 'warning')
+      return
+    }
+    setBulkMarking(true)
+    try {
+      const res = await fetch('/api/leads/bulk-mark-messaged', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ leadIds: [...selectedLeads] }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        showToast(data?.error || 'Failed to mark as messaged', 'error')
+        return
+      }
+      showToast(data.message || `${data.updated} lead(s) marked as messaged. Follow-ups scheduled.`, 'success')
+      setSelectedLeads(new Set())
+      fetchLeads()
+    } catch {
+      showToast('Failed to mark as messaged', 'error')
+    } finally {
+      setBulkMarking(false)
     }
   }
 
@@ -237,49 +296,101 @@ export default function LeadsPage() {
   return (
     <div style={{ padding: '2rem', maxWidth: '1400px', margin: '0 auto' }}>
       <ToastContainer toasts={toasts} onRemove={removeToast} />
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
-        <div>
-          <h1 style={{ fontSize: '2rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>Leads</h1>
-          <div style={{ display: 'flex', gap: '1rem', fontSize: '0.875rem', color: '#6b7280' }}>
-            <span>
-              <strong style={{ color: '#9ca3af' }}>Scraped:</strong> {leadCounts.SCRAPED || 0}
-            </span>
-            <span>
-              <strong style={{ color: '#f59e0b' }}>Unverified:</strong> {leadCounts.UNVERIFIED || 0}
-            </span>
-            <span>
-              <strong style={{ color: '#3b82f6' }}>Verified:</strong> {leadCounts.VERIFIED || 0}
-            </span>
-            <span>
-              <strong style={{ color: '#ef4444' }}>Invalid:</strong> {leadCounts.INVALID || 0}
-            </span>
-            <span>
-              <strong>Total:</strong> {leads.length}
-              {searchQuery && (
-                <span style={{ marginLeft: '0.5rem', color: '#6b7280' }}>
-                  ({filteredLeads.length} matching)
-                </span>
-              )}
-            </span>
-          </div>
-        </div>
-        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-          {selectedLeads.size > 0 && (
+      <div style={{ marginBottom: '1.5rem' }}>
+        <h1 style={{ fontSize: '2rem', fontWeight: 'bold', marginBottom: '0.75rem' }}>Leads</h1>
+        <p style={{ fontSize: '0.875rem', color: '#6b7280', marginBottom: '1rem' }}>
+          Click a tab to filter by status. Sort with the dropdowns. Use Auto-Validate to score Scraped/Unverified leads into Verified or Invalid.
+        </p>
+        {/* Status tabs: click to filter */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '1rem' }}>
+          {[
+            { value: '', label: 'All', count: Object.keys(leadCounts).length ? Object.values(leadCounts).reduce((a, b) => a + b, 0) : leads.length, tooltip: 'All leads' },
+            { value: 'SCRAPED', label: 'Scraped', count: leadCounts.SCRAPED || 0, color: '#9ca3af', tooltip: 'Just imported; run Validate to verify' },
+            { value: 'UNVERIFIED', label: 'Unverified', count: leadCounts.UNVERIFIED || 0, color: '#f59e0b', tooltip: 'Not yet validated; run Auto-Validate' },
+            { value: 'VERIFIED', label: 'Verified', count: leadCounts.VERIFIED || 0, color: '#3b82f6', tooltip: 'Ready to message – open lead → Generate message → WhatsApp' },
+            { value: 'MESSAGED', label: 'Messaged', count: leadCounts.MESSAGED || 0, color: '#8b5cf6', tooltip: 'First WhatsApp sent; follow-ups scheduled' },
+            { value: 'INTERESTED', label: 'Interested', count: leadCounts.INTERESTED || 0, color: '#10b981', tooltip: 'Showed interest; can convert to Customer' },
+            { value: 'CUSTOMER', label: 'Customer', count: leadCounts.CUSTOMER || 0, color: '#059669', tooltip: 'Converted from lead' },
+            { value: 'REPEAT_CUSTOMER', label: 'Repeat', count: leadCounts.REPEAT_CUSTOMER || 0, color: '#047857', tooltip: 'Repeat customer' },
+            { value: 'INVALID', label: 'Invalid', count: leadCounts.INVALID || 0, color: '#ef4444', tooltip: 'Invalid or no WhatsApp; skip or remove' },
+          ].map(({ value, label, count, color, tooltip }) => (
             <button
-              onClick={handleBulkDelete}
-              disabled={deleting === 'bulk'}
+              key={value || 'all'}
+              type="button"
+              title={tooltip}
+              onClick={() => setFilterStatus(value)}
               style={{
-                padding: '0.75rem 1.5rem',
-                backgroundColor: deleting === 'bulk' ? '#9ca3af' : '#ef4444',
-                color: 'white',
-                borderRadius: '6px',
-                fontWeight: '500',
-                border: 'none',
-                cursor: deleting === 'bulk' ? 'not-allowed' : 'pointer',
+                padding: '0.5rem 1rem',
+                borderRadius: '8px',
+                border: filterStatus === value ? `2px solid ${color || '#374151'}` : '1px solid #e5e7eb',
+                backgroundColor: filterStatus === value ? (color ? `${color}18` : '#f3f4f6') : '#fff',
+                color: color || '#374151',
+                fontWeight: filterStatus === value ? '600' : '500',
+                cursor: 'pointer',
+                fontSize: '0.875rem',
               }}
             >
-              {deleting === 'bulk' ? 'Deleting...' : `Delete Selected (${selectedLeads.size})`}
+              {label} ({count})
             </button>
+          ))}
+        </div>
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
+        <div style={{ fontSize: '0.875rem', color: '#6b7280' }}>
+          {filterStatus ? `Showing ${filteredLeads.length} ${filterStatus.replace('_', ' ').toLowerCase()} lead(s)` : `Showing ${filteredLeads.length} lead(s)`}
+          {searchQuery && ` (filtered by search)`}
+        </div>
+        <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+          {selectedLeads.size > 0 && (
+            <>
+              {selectedVerifiedCount > 0 && (
+                <button
+                  onClick={handleBulkMarkAsMessaged}
+                  disabled={bulkMarking}
+                  style={{
+                    padding: '0.75rem 1.25rem',
+                    backgroundColor: bulkMarking ? '#9ca3af' : '#3b82f6',
+                    color: 'white',
+                    borderRadius: '6px',
+                    fontWeight: '500',
+                    border: 'none',
+                    cursor: bulkMarking ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  {bulkMarking ? 'Updating…' : `Mark as messaged (${selectedVerifiedCount})`}
+                </button>
+              )}
+              <button
+                onClick={handleValidateSelected}
+                disabled={validating}
+                style={{
+                  padding: '0.75rem 1.25rem',
+                  backgroundColor: validating ? '#9ca3af' : '#10b981',
+                  color: 'white',
+                  borderRadius: '6px',
+                  fontWeight: '500',
+                  border: 'none',
+                  cursor: validating ? 'not-allowed' : 'pointer',
+                }}
+              >
+                {validating ? 'Validating...' : `Validate Selected (${selectedLeads.size})`}
+              </button>
+              <button
+                onClick={handleBulkDelete}
+                disabled={deleting === 'bulk'}
+                style={{
+                  padding: '0.75rem 1.25rem',
+                  backgroundColor: deleting === 'bulk' ? '#9ca3af' : '#ef4444',
+                  color: 'white',
+                  borderRadius: '6px',
+                  fontWeight: '500',
+                  border: 'none',
+                  cursor: deleting === 'bulk' ? 'not-allowed' : 'pointer',
+                }}
+              >
+                {deleting === 'bulk' ? 'Deleting...' : `Delete (${selectedLeads.size})`}
+              </button>
+            </>
           )}
           <button
             onClick={handleExportCsv}
@@ -294,20 +405,6 @@ export default function LeadsPage() {
             }}
           >
             Export CSV
-          </button>
-          <button
-            onClick={handleViewScrapedLeads}
-            style={{
-              padding: '0.75rem 1.5rem',
-              backgroundColor: filterStatus === 'SCRAPED' ? '#6366f1' : '#8b5cf6',
-              color: 'white',
-              borderRadius: '6px',
-              fontWeight: '500',
-              border: 'none',
-              cursor: 'pointer',
-            }}
-          >
-            View Scraped Leads {leadCounts.SCRAPED ? `(${leadCounts.SCRAPED})` : ''}
           </button>
           <button
             onClick={handleAutoValidate}
@@ -596,17 +693,32 @@ export default function LeadsPage() {
         {!error && filteredLeads.length === 0 && leads.length === 0 && (
           <EmptyState
             title="No leads yet"
-            description="Start building your lead pipeline by adding your first lead or running a scraper."
-            actionLabel="Add Lead"
-            actionHref="/leads/new"
+            description="Get leads from scrapers or add one manually. Then validate, message, and mark as messaged."
+            actionLabel="Go to Scrapers"
+            actionHref="/scrapers"
             icon="📋"
+            secondaryActionLabel="Add Lead"
+            secondaryActionHref="/leads/new"
           />
         )}
-        {!error && filteredLeads.length === 0 && leads.length > 0 && (
+        {!error && filteredLeads.length === 0 && leads.length > 0 && searchQuery && (
           <EmptyState
             title="No leads match your search"
-            description={`No leads found matching "${searchQuery}". Try adjusting your search or filters.`}
+            description={`No leads found matching "${searchQuery}". Try adjusting your search.`}
             icon="🔍"
+          />
+        )}
+        {!error && filteredLeads.length === 0 && leads.length > 0 && !searchQuery && filterStatus && (
+          <EmptyState
+            title={`No ${filterStatus.replace(/_/g, ' ').toLowerCase()} leads`}
+            description={
+              filterStatus === 'SCRAPED' || filterStatus === 'UNVERIFIED'
+                ? 'Run a scraper to get new leads, or click "Auto-Validate All" to move Scraped/Unverified leads into Verified or Invalid.'
+                : filterStatus === 'VERIFIED'
+                  ? 'Run "Auto-Validate All" on Scraped or Unverified leads to get verified leads here.'
+                  : `No leads in this status yet. Use the All tab or other tabs to view leads.`
+            }
+            icon="📂"
           />
         )}
       </div>

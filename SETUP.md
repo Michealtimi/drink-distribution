@@ -38,6 +38,24 @@ npm run db:generate
 npm run db:push
 ```
 
+**After any change to `prisma/schema.prisma`**, run:
+
+```bash
+pnpm db:push
+pnpm prisma generate
+```
+
+Restart the dev server if it’s running. (With migrations: `pnpm db:migrate` then `pnpm prisma generate`.)
+
+## Optional: Dashboard PIN (Auth)
+
+To protect the app with a PIN:
+
+1. In `.env`, set `DASHBOARD_PIN` to a numeric PIN (e.g. `1234`).
+2. On first visit you’ll be redirected to `/login`. Enter the PIN to continue.
+3. **Public routes** (no PIN): `/login`, `/api/auth/*`, `/api/cron/*`. All other pages and API routes require the PIN when `DASHBOARD_PIN` is set.
+4. To disable PIN protection, remove or leave `DASHBOARD_PIN` unset.
+
 ## Step 4: Run Development Server
 
 ```bash
@@ -72,6 +90,10 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 - Run `npm run db:generate` again
 - Check Prisma schema syntax
 - Verify database permissions
+
+**Scraper: "Unknown argument \`scrapedResults\`" in terminal?**
+- Your Prisma client is out of date. Run: `pnpm db:push` then `pnpm prisma generate`
+- Restart the dev server. Live scraped results still work from the in-memory store; this only fixes saving them to the DB.
 
 **Port 3000 already in use?**
 - Change port: `npm run dev -- -p 3001`

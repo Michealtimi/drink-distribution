@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { notFound, internalError } from '@/lib/api-errors'
 
 export async function GET(
   request: NextRequest,
@@ -11,24 +12,15 @@ export async function GET(
       include: {
         orders: {
           orderBy: { createdAt: 'desc' },
-          include: {
-            items: true,
-            payments: true,
-          },
+          include: { items: true, payments: true },
         },
       },
     })
 
-    if (!customer) {
-      return NextResponse.json({ error: 'Customer not found' }, { status: 404 })
-    }
-
+    if (!customer) return notFound('Customer not found')
     return NextResponse.json(customer)
   } catch (error) {
     console.error('Error fetching customer:', error)
-    return NextResponse.json(
-      { error: 'Failed to fetch customer' },
-      { status: 500 }
-    )
+    return internalError('Failed to fetch customer')
   }
 }

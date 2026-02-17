@@ -15,12 +15,16 @@ interface ToastProps {
 
 export default function ToastContainer({ toasts, onRemove }: ToastProps) {
   useEffect(() => {
+    const timers: ReturnType<typeof setTimeout>[] = []
     toasts.forEach((toast) => {
       const timer = setTimeout(() => {
         onRemove(toast.id)
       }, 5000)
-      return () => clearTimeout(timer)
+      timers.push(timer)
     })
+    return () => {
+      timers.forEach((t) => clearTimeout(t))
+    }
   }, [toasts, onRemove])
 
   if (toasts.length === 0) return null

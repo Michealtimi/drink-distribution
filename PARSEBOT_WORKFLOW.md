@@ -103,4 +103,4 @@ For best results, CSV should have:
 - **ParseBot** = no-code scraper; its **flow** is: target sites → build scrapers → export to Sheets/CSV → import to CRM.  
 - **Pattern:** Export to Sheets/CSV, then use this CRM's **Imports** and/or **Email / phone extractors** so all scrapers follow the same "consolidate → enrich" pattern.
 
-For the full list of sources (Axiom, Playwright, Firecrawl, Apify, Email/Phone extractors, ParseBot), open the **Scrapers** page in this app.
+For the full list of sources (internal Playwright scrapers, Email/Phone extractors, ParseBot, CSV import), open the **Scrapers** page in this app.

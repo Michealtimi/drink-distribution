@@ -3,13 +3,11 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import ToastContainer, { useToast } from '../components/Toast'
 
+// Internal scrapers only (Playwright-based; no external services)
 const SCRAPER_OPTIONS = [
   { value: 'GOOGLE_MAPS', label: 'Google Maps', description: 'Search businesses on Google Maps' },
-  { value: 'INSTAGRAM', label: 'Instagram', description: 'Scrape business pages from Instagram' },
   { value: 'DIRECTORY', label: 'Business Directory', description: 'General business directory sites' },
-  { value: 'BUSINESSLIST', label: 'BusinessList Nigeria', description: 'BusinessList.ng directory' },
   { value: 'FINELIB', label: 'Finelib', description: 'Finelib.com business listings' },
-  { value: 'FACEBOOK', label: 'Facebook', description: 'Facebook business pages' },
 ] as const
 
 const CITIES = [
@@ -31,6 +29,11 @@ const CATEGORIES = [
   { value: 'SMALL_RETAILER', label: 'Small Retailer' },
   { value: 'OTHER', label: 'Other' },
 ]
+
+// Target segments — suggested queries (from TARGET_SEGMENTS_AND_GO_TO_MARKET.md). Use in Query field.
+const SUGGESTED_QUERIES_PRIMARY = ['nightclub', 'lounge', 'bar', 'event center', 'event venue', 'gym', 'fitness studio', 'energy drink supplier', 'Red Bull distributor']
+const SUGGESTED_QUERIES_VOLUME = ['supermarket', 'mini market', 'liquor store', 'drink depot', 'hotel', 'resort', 'retail']
+const SUGGESTED_QUERIES_OFFICE = ['corporate office', 'co-working', 'office']
 
 interface ScrapingJob {
   id: string
@@ -61,6 +64,9 @@ export default function ScrapersPage() {
   const [queries, setQueries] = useState('')
   const [city, setCity] = useState('')
   const [category, setCategory] = useState('')
+  const [runAllAreas, setRunAllAreas] = useState(false)
+  const [maxResults, setMaxResults] = useState(50)
+  const [checkWhatsAppBeforeImport, setCheckWhatsAppBeforeImport] = useState(false)
   const [running, setRunning] = useState(false)
   const [jobs, setJobs] = useState<ScrapingJob[]>([])
   const [loadingHistory, setLoadingHistory] = useState(true)
@@ -168,6 +174,9 @@ export default function ScrapersPage() {
           query: queryInput.length === 1 ? queryInput[0] : undefined,
           city: city || undefined,
           category: category || undefined,
+          runAllAreas: runAllAreas || undefined,
+          maxResults: maxResults || undefined,
+          checkWhatsAppBeforeImport: checkWhatsAppBeforeImport || undefined,
         }),
       })
       const data = await res.json()
@@ -175,7 +184,7 @@ export default function ScrapersPage() {
         showToast(data.error || 'Failed to start scraper', 'error')
         return
       }
-      showToast(`Started ${data.jobIds?.length || 1} job(s). Check history below.`, 'success')
+      showToast("Job started. We'll add leads to Leads when done. Check history below.", 'success')
       fetchHistory()
     } catch {
       showToast('Failed to start scraper', 'error')
@@ -204,9 +213,25 @@ export default function ScrapersPage() {
       <p style={{ color: '#6b7280', fontSize: '0.875rem', marginBottom: '0.5rem' }}>
         Get leads (gyms, event centers, clubs, lounges, offices, retailers) in Lagos or Abuja into <strong>Leads</strong> so you can message and convert.
       </p>
-      <p style={{ color: '#374151', fontSize: '0.875rem', marginBottom: '1.5rem' }}>
-        <strong>Recommended:</strong> Use the <strong>internal scrapers</strong> below (Finelib, Directory, Google Maps, BusinessList). One setup, no external services.
+      <p style={{ color: '#374151', fontSize: '0.875rem', marginBottom: '1rem' }}>
+        <strong>Recommended:</strong> Use the <strong>internal scrapers</strong> below (Finelib, Directory, Google Maps). One setup, no external services.
       </p>
+      <div style={{ marginBottom: '1.5rem', padding: '1rem 1.25rem', backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '8px', fontSize: '0.8125rem' }}>
+        <strong style={{ color: '#166534' }}>Target segments — suggested queries</strong>
+        <p style={{ margin: '0.5rem 0 0 0', color: '#15803d' }}>Use these in the Query field to match your target universe (Nightlife, Event, Gym, Retail, Office). See TARGET_SEGMENTS_AND_GO_TO_MARKET.md for full strategy.</p>
+        <div style={{ marginTop: '0.5rem', display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
+          {[...SUGGESTED_QUERIES_PRIMARY, ...SUGGESTED_QUERIES_VOLUME, ...SUGGESTED_QUERIES_OFFICE].slice(0, 12).map((q) => (
+            <button
+              key={q}
+              type="button"
+              onClick={() => setQuery(q)}
+              style={{ padding: '0.25rem 0.5rem', borderRadius: '4px', border: '1px solid #86efac', background: '#dcfce7', color: '#166534', fontSize: '0.75rem', cursor: 'pointer' }}
+            >
+              {q}
+            </button>
+          ))}
+        </div>
+      </div>
 
       {/* Internal scrapers — primary path */}
       <Section
@@ -214,7 +239,7 @@ export default function ScrapersPage() {
         badge="Recommended · Free · Runs locally"
         description="Built-in scrapers that run on your machine. Best for: gyms, events, clubs, lounges, offices, small retailers in Lagos/Abuja."
         flow="Select scraper(s) → enter query (e.g. gym, event center, lounge) → choose city → Start → jobs run → results in Leads and Job history below."
-        pattern="One flow for all internal scrapers; no Axiom or Apify required."
+        pattern="One flow for all internal scrapers; runs locally with Playwright."
       >
         <div style={{ marginBottom: '1rem', padding: '1rem 1.25rem', backgroundColor: '#eff6ff', border: '1px solid #93c5fd', borderRadius: '8px', fontSize: '0.875rem' }}>
           <strong style={{ display: 'block', marginBottom: '0.5rem', color: '#1e40af' }}>First-time setup</strong>
@@ -260,6 +285,19 @@ export default function ScrapersPage() {
             <select value={category} onChange={(e) => setCategory(e.target.value)} style={inputStyle}>
               {CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
             </select>
+            <label style={{ display: 'block', marginBottom: '0.25rem', marginTop: '0.75rem', fontWeight: '500', fontSize: '0.875rem' }}>Max results per query (search range)</label>
+            <input type="number" min={1} max={200} value={maxResults} onChange={(e) => setMaxResults(Number(e.target.value) || 50)} style={{ ...inputStyle, width: '120px' }} />
+            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.75rem', cursor: 'pointer' }}>
+              <input type="checkbox" checked={runAllAreas} onChange={(e) => setRunAllAreas(e.target.checked)} />
+              <span style={{ fontSize: '0.875rem' }}>Run for all areas (every town/LGA in selected city)</span>
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.5rem', cursor: 'pointer' }}>
+              <input type="checkbox" checked={checkWhatsAppBeforeImport} onChange={(e) => setCheckWhatsAppBeforeImport(e.target.checked)} />
+              <span style={{ fontSize: '0.875rem' }}>Only import leads with WhatsApp (checks before saving, max 40 per job)</span>
+            </label>
+            <p style={{ margin: '0.25rem 0 0', fontSize: '0.75rem', color: '#6b7280' }}>
+              Expands your query to run once per area. All results are deduped and auto-imported to Leads.
+            </p>
             <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1rem', alignItems: 'center' }}>
               <button type="button" onClick={handleRun} disabled={running} style={{ padding: '0.75rem 1.5rem', backgroundColor: running ? '#9ca3af' : '#3b82f6', color: 'white', border: 'none', borderRadius: '6px', fontWeight: '600', cursor: running ? 'not-allowed' : 'pointer' }}>
                 {running ? 'Starting…' : 'Start'}
@@ -391,7 +429,7 @@ function JobHistoryTable({
             {filterType ? `No jobs for this scraper yet.` : 'No scraper jobs yet.'}
           </p>
           <p style={{ fontSize: '0.875rem', color: '#6b7280', marginTop: '0.5rem', marginBottom: 0 }}>
-            {filterType ? 'Run this scraper above to see rows here.' : 'Select one or more scrapers above, enter a query, and click Start. Each job will appear here with View details and Stop.'}
+            {filterType ? 'Run this scraper above to see rows here.' : 'Select one or more scrapers above, enter a query, and click Start. Each job will appear here. When done, leads go to Leads — use View in Leads from the table.'}
           </p>
         </div>
       ) : (
@@ -419,7 +457,7 @@ function JobHistoryTable({
                   <td style={{ padding: '0.5rem 0.75rem', textAlign: 'right' }}>{job.leadsFound}</td>
                   <td style={{ padding: '0.5rem 0.75rem', textAlign: 'right' }}>{job.leadsImported}</td>
                   <td style={{ padding: '0.5rem 0.75rem', color: '#6b7280' }}>{new Date(job.createdAt).toLocaleString()}</td>
-                  <td style={{ padding: '0.5rem 0.75rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                  <td style={{ padding: '0.5rem 0.75rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
                     {(job.status === 'PENDING' || job.status === 'RUNNING') && (
                       <button
                         type="button"
@@ -454,6 +492,23 @@ function JobHistoryTable({
                     >
                       View details
                     </a>
+                    {job.leadsImported != null && job.leadsImported > 0 && (
+                      <a
+                        href="/leads"
+                        style={{
+                          display: 'inline-block',
+                          padding: '0.35rem 0.75rem',
+                          backgroundColor: '#10b981',
+                          color: 'white',
+                          borderRadius: '6px',
+                          textDecoration: 'none',
+                          fontSize: '0.8125rem',
+                          fontWeight: '500',
+                        }}
+                      >
+                        View in Leads ({job.leadsImported})
+                      </a>
+                    )}
                   </td>
                 </tr>
               ))}

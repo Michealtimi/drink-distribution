@@ -1,5 +1,6 @@
 import { prisma } from './prisma'
 import { LeadStatus } from '@prisma/client'
+import { validatePhoneWithReason } from './phone-utils'
 
 /**
  * Enhanced lead validation rules
@@ -27,11 +28,17 @@ export async function validateLead(leadId: string): Promise<ValidationResult> {
   const reasons: string[] = []
   let score = 100
 
-  // 1. Phone validation (30 points)
-  const phoneValid = validatePhone(lead.phone)
-  if (!phoneValid.valid) {
-    reasons.push(`Phone: ${phoneValid.reason}`)
-    score -= 30
+  // 1. Phone validation: missing/empty = smaller penalty so name+address can still yield VERIFIED
+  const hasPhone = lead.phone && lead.phone.trim() && lead.phone !== 'NO_PHONE'
+  if (!hasPhone) {
+    reasons.push('Phone: missing')
+    score -= 15
+  } else {
+    const phoneValid = validatePhoneWithReason(lead.phone)
+    if (!phoneValid.valid) {
+      reasons.push(`Phone: ${phoneValid.reason}`)
+      score -= 20
+    }
   }
 
   // 2. Name validation (20 points)
@@ -85,35 +92,6 @@ export async function validateLead(leadId: string): Promise<ValidationResult> {
     reasons,
     score,
   }
-}
-
-/**
- * Validate phone number format
- */
-function validatePhone(phone: string): { valid: boolean; reason?: string } {
-  // Remove all non-digits
-  const cleaned = phone.replace(/\D/g, '')
-
-  // Must start with 234 (Nigerian country code)
-  if (!cleaned.startsWith('234')) {
-    return { valid: false, reason: 'Must start with 234' }
-  }
-
-  // Must be 13 digits total (234 + 10 digits)
-  if (cleaned.length !== 13) {
-    return { valid: false, reason: `Invalid length: ${cleaned.length} (expected 13)` }
-  }
-
-  // Check for common invalid patterns
-  const last10 = cleaned.substring(3)
-  if (last10.match(/^0{10}$/)) {
-    return { valid: false, reason: 'All zeros' }
-  }
-  if (last10.match(/^1{10}$/)) {
-    return { valid: false, reason: 'All ones' }
-  }
-
-  return { valid: true }
 }
 
 /**
@@ -214,25 +192,33 @@ export async function validateLeadsBatch(leadIds: string[]): Promise<{
 }
 
 /**
- * Auto-validate all SCRAPED leads
+ * Auto-validate leads by status (default: SCRAPED and UNVERIFIED so first-time and re-validation both run)
  */
-export async function autoValidateScrapedLeads(): Promise<{
-  validated: number
-  verified: number
-  invalid: number
-}> {
-  // Get all SCRAPED leads
-  const scrapedLeads = await prisma.lead.findMany({
-    where: { status: LeadStatus.SCRAPED },
+export async function autoValidateScrapedLeads(options?: {
+  statuses?: LeadStatus[]
+}): Promise<{ validated: number; verified: number; invalid: number }> {
+  const statuses = options?.statuses ?? [LeadStatus.SCRAPED, LeadStatus.UNVERIFIED]
+  const leads = await prisma.lead.findMany({
+    where: { status: { in: statuses } },
     select: { id: true },
   })
-
-  const leadIds = scrapedLeads.map((l) => l.id)
+  const leadIds = leads.map((l) => l.id)
   const result = await validateLeadsBatch(leadIds)
-
   return {
     validated: result.validated,
     verified: result.verified,
     invalid: result.invalid,
   }
+}
+
+/**
+ * Validate specific lead IDs (e.g. selected in UI)
+ */
+export async function validateLeadIds(leadIds: string[]): Promise<{
+  validated: number
+  verified: number
+  invalid: number
+  errors: string[]
+}> {
+  return validateLeadsBatch(leadIds)
 }

@@ -4,6 +4,14 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import LoadingSkeleton from './components/LoadingSkeleton'
 
+const GETTING_STARTED_STEPS = [
+  { step: 1, label: 'Find leads', action: 'Run a scraper or add a lead', href: '/scrapers', linkText: 'Scrapers' },
+  { step: 2, label: 'Validate', action: 'Move Scraped/Unverified to Verified or Invalid', href: '/leads?status=SCRAPED', linkText: 'Leads' },
+  { step: 3, label: 'Open a lead', action: 'Click a Verified lead to open it', href: '/leads?status=VERIFIED', linkText: 'Verified leads' },
+  { step: 4, label: 'Message', action: "Click 'Message this lead' → Copy → Open WhatsApp → send", href: '/leads', linkText: 'Leads' },
+  { step: 5, label: 'Mark as messaged', action: "After sending, click 'I've sent it – mark as messaged' so follow-ups are scheduled", href: '/today', linkText: 'Today' },
+]
+
 interface QuickStats {
   totalLeads: number
   totalCustomers: number
@@ -18,6 +26,7 @@ interface QuickStats {
 export default function Home() {
   const [stats, setStats] = useState<QuickStats | null>(null)
   const [loading, setLoading] = useState(true)
+  const [showGettingStarted, setShowGettingStarted] = useState(true)
 
   useEffect(() => {
     fetchQuickStats()
@@ -86,6 +95,54 @@ export default function Home() {
           }}>
             Welcome back! Here's an overview of your beverage distribution business.
           </p>
+        </div>
+
+        {/* Getting started */}
+        <div style={{
+          marginBottom: '2rem',
+          backgroundColor: '#eff6ff',
+          border: '1px solid #93c5fd',
+          borderRadius: '8px',
+          overflow: 'hidden',
+        }}>
+          <button
+            type="button"
+            onClick={() => setShowGettingStarted((v) => !v)}
+            style={{
+              width: '100%',
+              padding: '1rem 1.5rem',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              fontSize: '1.125rem',
+              fontWeight: '600',
+              color: '#1e40af',
+            }}
+          >
+            Getting started
+            <span style={{ fontSize: '1.25rem' }}>{showGettingStarted ? '−' : '+'}</span>
+          </button>
+          {showGettingStarted && (
+            <div style={{ padding: '0 1.5rem 1.5rem' }}>
+              <p style={{ color: '#1e3a8a', marginBottom: '1rem', fontSize: '0.9375rem' }}>
+                New here? Follow these steps to find leads, sort them, and send your first message.
+              </p>
+              <ol style={{ margin: 0, paddingLeft: '1.25rem', color: '#1e3a8a', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                {GETTING_STARTED_STEPS.map(({ step, label, action, href, linkText }) => (
+                  <li key={step} style={{ fontSize: '0.9375rem' }}>
+                    <strong>{label}:</strong> {action}{' '}
+                    <Link href={href} style={{ color: '#1d4ed8', fontWeight: '600' }}>{linkText}</Link>
+                  </li>
+                ))}
+              </ol>
+              <p style={{ marginTop: '1rem', marginBottom: 0, fontSize: '0.875rem', color: '#1e3a8a' }}>
+                Or go to <Link href="/today" style={{ color: '#1d4ed8', fontWeight: '600' }}>Today</Link> to see your action queue (follow-ups + leads to message).
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Quick Stats */}

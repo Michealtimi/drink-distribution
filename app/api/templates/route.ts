@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { CustomerType, City } from '@prisma/client'
+import { badRequest, internalError } from '@/lib/api-errors'
+import { createTemplateSchema, parseListLimit } from '@/lib/validations/api-schemas'
 
 export async function GET(request: NextRequest) {
   try {
@@ -10,6 +12,7 @@ export async function GET(request: NextRequest) {
     const city = searchParams.get('city') as City | null
     const stage = searchParams.get('stage')
     const isActive = searchParams.get('isActive')
+    const take = parseListLimit(searchParams)
 
     const templates = await prisma.messageTemplate.findMany({
       where: {
@@ -17,54 +20,41 @@ export async function GET(request: NextRequest) {
         ...(category && { category }),
         ...(city && { city }),
         ...(stage && { stage }),
-        ...(isActive !== null && { isActive: isActive === 'true' }),
+        ...(isActive !== null && isActive !== undefined && { isActive: isActive === 'true' }),
       },
-      orderBy: {
-        createdAt: 'desc',
-      },
+      orderBy: { createdAt: 'desc' },
+      take,
     })
 
     return NextResponse.json(templates)
   } catch (error) {
     console.error('Error fetching templates:', error)
-    return NextResponse.json(
-      { error: 'Failed to fetch templates' },
-      { status: 500 }
-    )
+    return internalError('Failed to fetch templates')
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { name, type, category, city, stage, content, variables, isActive } = body
-
-    if (!name || !type || !stage || !content) {
-      return NextResponse.json(
-        { error: 'Name, type, stage, and content are required' },
-        { status: 400 }
-      )
-    }
+    const parsed = createTemplateSchema.safeParse(body)
+    if (!parsed.success) return badRequest('Validation failed', parsed.error.flatten())
 
     const template = await prisma.messageTemplate.create({
       data: {
-        name,
-        type,
-        category: category || null,
-        city: city || null,
-        stage,
-        content,
-        variables: variables || [],
-        isActive: isActive !== undefined ? isActive : true,
+        name: parsed.data.name,
+        type: parsed.data.type,
+        category: parsed.data.category ?? null,
+        city: parsed.data.city ?? null,
+        stage: parsed.data.stage,
+        content: parsed.data.content,
+        variables: parsed.data.variables,
+        isActive: parsed.data.isActive,
       },
     })
 
     return NextResponse.json(template, { status: 201 })
   } catch (error) {
     console.error('Error creating template:', error)
-    return NextResponse.json(
-      { error: 'Failed to create template' },
-      { status: 500 }
-    )
+    return internalError('Failed to create template')
   }
 }

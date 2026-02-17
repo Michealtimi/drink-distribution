@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { City, CustomerType } from '@prisma/client'
+import { notFound, badRequest, internalError } from '@/lib/api-errors'
+import { updateBusinessSchema } from '@/lib/validations/api-schemas'
 
 export async function GET(
   request: NextRequest,
@@ -36,20 +37,11 @@ export async function GET(
       },
     })
 
-    if (!business) {
-      return NextResponse.json(
-        { error: 'Business not found' },
-        { status: 404 }
-      )
-    }
-
+    if (!business) return notFound('Business not found')
     return NextResponse.json(business)
   } catch (error) {
     console.error('Error fetching business:', error)
-    return NextResponse.json(
-      { error: 'Failed to fetch business' },
-      { status: 500 }
-    )
+    return internalError('Failed to fetch business')
   }
 }
 
@@ -59,30 +51,30 @@ export async function PUT(
 ) {
   try {
     const body = await request.json()
-    const { name, phone, email, address, area, city, category, website, notes } = body
+    const parsed = updateBusinessSchema.safeParse(body)
+    if (!parsed.success) return badRequest('Validation failed', parsed.error.flatten())
 
     const business = await prisma.business.update({
       where: { id: params.id },
       data: {
-        ...(name && { name }),
-        ...(phone !== undefined && { phone }),
-        ...(email !== undefined && { email }),
-        ...(address !== undefined && { address }),
-        ...(area !== undefined && { area }),
-        ...(city && { city }),
-        ...(category && { category }),
-        ...(website !== undefined && { website }),
-        ...(notes !== undefined && { notes }),
+        ...(parsed.data.name != null && { name: parsed.data.name }),
+        ...(parsed.data.phone !== undefined && { phone: parsed.data.phone ?? null }),
+        ...(parsed.data.email !== undefined && { email: parsed.data.email ?? null }),
+        ...(parsed.data.address !== undefined && { address: parsed.data.address ?? null }),
+        ...(parsed.data.area !== undefined && { area: parsed.data.area ?? null }),
+        ...(parsed.data.city != null && { city: parsed.data.city }),
+        ...(parsed.data.category != null && { category: parsed.data.category }),
+        ...(parsed.data.website !== undefined && { website: parsed.data.website ?? null }),
+        ...(parsed.data.notes !== undefined && { notes: parsed.data.notes ?? null }),
       },
     })
 
     return NextResponse.json(business)
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Error updating business:', error)
-    return NextResponse.json(
-      { error: 'Failed to update business' },
-      { status: 500 }
-    )
+    if (error && typeof error === 'object' && 'code' in error && (error as { code: string }).code === 'P2025')
+      return notFound('Business not found')
+    return internalError('Failed to update business')
   }
 }
 
@@ -91,16 +83,12 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
-    await prisma.business.delete({
-      where: { id: params.id },
-    })
-
+    await prisma.business.delete({ where: { id: params.id } })
     return NextResponse.json({ success: true })
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Error deleting business:', error)
-    return NextResponse.json(
-      { error: 'Failed to delete business' },
-      { status: 500 }
-    )
+    if (error && typeof error === 'object' && 'code' in error && (error as { code: string }).code === 'P2025')
+      return notFound('Business not found')
+    return internalError('Failed to delete business')
   }
 }
