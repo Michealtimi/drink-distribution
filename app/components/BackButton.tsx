@@ -19,33 +19,8 @@ export default function BackButton({ href, label = 'Back' }: BackButtonProps) {
   }
 
   return (
-    <button
-      onClick={handleClick}
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: '0.5rem',
-        padding: '0.5rem 1rem',
-        backgroundColor: 'white',
-        border: '1px solid #d1d5db',
-        borderRadius: '6px',
-        color: '#374151',
-        fontSize: '0.875rem',
-        fontWeight: '500',
-        cursor: 'pointer',
-        transition: 'all 0.2s',
-        marginBottom: '1rem',
-      }}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.backgroundColor = '#f9fafb'
-        e.currentTarget.style.borderColor = '#9ca3af'
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.backgroundColor = 'white'
-        e.currentTarget.style.borderColor = '#d1d5db'
-      }}
-    >
-      <span style={{ fontSize: '1rem' }}>←</span>
+    <button onClick={handleClick} className="back-button">
+      <span className="back-icon">←</span>
       {label}
     </button>
   )

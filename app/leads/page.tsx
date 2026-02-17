@@ -294,7 +294,7 @@ function LeadsContent() {
   }
 
   return (
-    <div style={{ padding: '2rem', maxWidth: '1400px', margin: '0 auto' }}>
+    <div className="container">
       <ToastContainer toasts={toasts} onRemove={removeToast} />
       <div style={{ marginBottom: '1.5rem' }}>
         <h1 style={{ fontSize: '2rem', fontWeight: 'bold', marginBottom: '0.75rem' }}>Leads</h1>
@@ -542,7 +542,8 @@ function LeadsContent() {
         border: '1px solid #e0e0e0',
         overflow: 'hidden',
       }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <div className="table-responsive">
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ backgroundColor: '#f9fafb', borderBottom: '1px solid #e0e0e0', position: 'sticky', top: 0, zIndex: 10 }}>
               <th style={{ padding: '1rem', textAlign: 'left', fontWeight: '600', width: '40px' }}>
@@ -658,7 +659,30 @@ function LeadsContent() {
               </tr>
             ))}
           </tbody>
-        </table>
+          </table>
+
+          {/* Mobile cards (visible only on small screens) */}
+          {filteredLeads.map((lead) => (
+            <div key={lead.id} className="mobile-card">
+              <div className="mobile-card-row">
+                <div className="mobile-card-title">{lead.name}</div>
+                <div className="mobile-card-actions">
+                  <Link href={`/leads/${lead.id}`} className="mobile-link">View</Link>
+                  <button onClick={() => handleDeleteLead(lead.id)} className="mobile-delete">{deleting === lead.id ? 'Deleting…' : 'Delete'}</button>
+                </div>
+              </div>
+              <div className="mobile-card-meta">
+                <div><strong>Phone:</strong> {lead.phone && lead.phone !== 'NO_PHONE' ? lead.phone : '-'}</div>
+                <div><strong>Email:</strong> {lead.email ? <a href={`mailto:${lead.email}`}>{lead.email}</a> : '-'}</div>
+                <div><strong>Area:</strong> {lead.area || '-'}</div>
+                <div><strong>City:</strong> {lead.city}</div>
+                <div><strong>Category:</strong> {lead.category.replace('_', ' ')}</div>
+                <div><strong>Status:</strong> <span className="mobile-status" style={{ color: statusColors[lead.status] }}>{lead.status.replace('_', ' ')}</span></div>
+                <div><strong>Source:</strong> {lead.source || '-'}</div>
+              </div>
+            </div>
+          ))}
+        </div>
 
         {error && (
           <div style={{ padding: '2rem', textAlign: 'center' }}>

@@ -164,7 +164,7 @@ export default function LeadDetailPage() {
   }
 
   return (
-    <div style={{ padding: '2rem', maxWidth: '1000px', margin: '0 auto' }}>
+    <div className="container" style={{ maxWidth: '1000px' }}>
       <ToastContainer toasts={toasts} onRemove={removeToast} />
       <div style={{ marginBottom: '2rem' }}>
         <BackButton href="/leads" label="Back to Leads" />
@@ -173,18 +173,8 @@ export default function LeadDetailPage() {
         </h1>
       </div>
 
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: '1fr 1fr',
-        gap: '1.5rem',
-        marginBottom: '2rem',
-      }}>
-        <div style={{
-          backgroundColor: 'white',
-          padding: '1.5rem',
-          borderRadius: '8px',
-          border: '1px solid #e0e0e0',
-        }}>
+      <div className="detail-grid" style={{ marginBottom: '2rem' }}>
+        <div className="card">
           <h2 style={{ marginBottom: '1rem', fontSize: '1.25rem', fontWeight: '600' }}>
             Contact Information
           </h2>
@@ -216,12 +206,7 @@ export default function LeadDetailPage() {
           </div>
         </div>
 
-        <div style={{
-          backgroundColor: 'white',
-          padding: '1.5rem',
-          borderRadius: '8px',
-          border: '1px solid #e0e0e0',
-        }}>
+        <div className="card">
           <h2 style={{ marginBottom: '1rem', fontSize: '1.25rem', fontWeight: '600' }}>
             Status & Actions
           </h2>

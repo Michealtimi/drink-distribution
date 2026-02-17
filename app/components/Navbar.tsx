@@ -29,72 +29,21 @@ export default function Navbar() {
   ]
 
   return (
-    <nav
-      style={{
-        width: '220px',
-        minWidth: '220px',
-        backgroundColor: '#1f2937',
-        color: 'white',
-        borderRight: '1px solid #374151',
-        display: 'flex',
-        flexDirection: 'column',
-        minHeight: '100vh',
-      }}
-    >
-      <Link
-        href="/"
-        style={{
-          fontSize: '1rem',
-          fontWeight: 'bold',
-          color: 'white',
-          textDecoration: 'none',
-          padding: '1.25rem 1rem',
-          borderBottom: '1px solid #374151',
-          flexShrink: 0,
-        }}
-      >
-        Beverage Distribution CRM
-      </Link>
+    <nav className="app-nav">
+      <div className="nav-brand">
+        <Link href="/">Beverage Distribution CRM</Link>
+      </div>
 
-      <div
-        style={{
-          flex: 1,
-          overflowY: 'auto',
-          padding: '0.75rem 0',
-        }}
-      >
+      <div className="nav-links">
         {navLinks.map((link) => {
           const isActive =
-            pathname === link.href ||
-            (link.href !== '/' && pathname?.startsWith(link.href))
+            pathname === link.href || (link.href !== '/' && pathname?.startsWith(link.href))
 
           return (
             <Link
               key={link.href}
               href={link.href}
-              style={{
-                display: 'block',
-                color: isActive ? '#60a5fa' : '#d1d5db',
-                textDecoration: 'none',
-                padding: '0.6rem 1rem',
-                fontSize: '0.9rem',
-                fontWeight: isActive ? '600' : '400',
-                backgroundColor: isActive ? '#374151' : 'transparent',
-                borderLeft: isActive ? '3px solid #60a5fa' : '3px solid transparent',
-                transition: 'all 0.2s',
-              }}
-              onMouseEnter={(e) => {
-                if (!isActive) {
-                  e.currentTarget.style.color = '#9ca3af'
-                  e.currentTarget.style.backgroundColor = '#374151'
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (!isActive) {
-                  e.currentTarget.style.color = '#d1d5db'
-                  e.currentTarget.style.backgroundColor = 'transparent'
-                }
-              }}
+              className={`nav-link ${isActive ? 'active' : ''}`}
             >
               {link.label}
             </Link>
@@ -102,23 +51,8 @@ export default function Navbar() {
         })}
       </div>
 
-      <div style={{ padding: '0.75rem 1rem', borderTop: '1px solid #374151' }}>
-        <button
-          type="button"
-          onClick={handleLogout}
-          style={{
-            display: 'block',
-            width: '100%',
-            padding: '0.6rem 1rem',
-            color: '#9ca3af',
-            background: 'none',
-            border: 'none',
-            borderRadius: '6px',
-            fontSize: '0.875rem',
-            cursor: 'pointer',
-            textAlign: 'left',
-          }}
-        >
+      <div className="nav-footer">
+        <button type="button" onClick={handleLogout} className="nav-logout">
           Logout
         </button>
       </div>

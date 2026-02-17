@@ -22,15 +22,7 @@ export default function EmptyState({
   icon = '📋',
 }: EmptyStateProps) {
   return (
-    <div
-      style={{
-        padding: '4rem 2rem',
-        textAlign: 'center',
-        backgroundColor: 'white',
-        borderRadius: '8px',
-        border: '1px solid #e0e0e0',
-      }}
-    >
+    <div className="card empty-state">
       <div style={{ fontSize: '4rem', marginBottom: '1rem' }}>{icon}</div>
       <h3
         style={{

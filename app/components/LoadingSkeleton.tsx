@@ -7,7 +7,7 @@ interface LoadingSkeletonProps {
 
 export default function LoadingSkeleton({ rows = 5, columns = 8 }: LoadingSkeletonProps) {
   return (
-    <div style={{ padding: '2rem', maxWidth: '1400px', margin: '0 auto' }}>
+    <div className="container">
       <div style={{ marginBottom: '2rem' }}>
         <div
           style={{
@@ -30,14 +30,7 @@ export default function LoadingSkeleton({ rows = 5, columns = 8 }: LoadingSkelet
         />
       </div>
 
-      <div
-        style={{
-          backgroundColor: 'white',
-          borderRadius: '8px',
-          border: '1px solid #e0e0e0',
-          overflow: 'hidden',
-        }}
-      >
+      <div className="card">
         {/* Table header skeleton */}
         <div
           style={{
@@ -47,8 +40,7 @@ export default function LoadingSkeleton({ rows = 5, columns = 8 }: LoadingSkelet
             padding: '1rem',
             backgroundColor: '#f9fafb',
             borderBottom: '1px solid #e0e0e0',
-          }}
-        >
+          }}>
           {Array.from({ length: columns }).map((_, i) => (
             <div
               key={i}
