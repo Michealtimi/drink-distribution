@@ -142,11 +142,11 @@ export async function GET() {
         conversionRate: Math.round(conversionRate * 100) / 100,
       },
       leads: {
-        byStatus: leadsByStatus.map(s => ({
+        byStatus: leadsByStatus.map((s: typeof leadsByStatus[number]) => ({
           status: s.status,
           count: s._count,
         })),
-        bySource: leadsBySource.map(s => ({
+        bySource: leadsBySource.map((s: typeof leadsBySource[number]) => ({
           source: s.source || 'Unknown',
           count: s._count,
         })),
