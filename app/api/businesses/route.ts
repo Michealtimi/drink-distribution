@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { CustomerType } from '@prisma/client'
 import { badRequest, internalError } from '@/lib/api-errors'
 import { createBusinessSchema, parseListLimit } from '@/lib/validations/api-schemas'
 
@@ -13,8 +12,8 @@ export async function GET(request: NextRequest) {
 
     const businesses = await prisma.business.findMany({
       where: {
-        ...(city && { city }),
-        ...(category && { category }),
+        ...(city ? { city: city as any } : {}),
+        ...(category ? { category: category as any } : {}),
       },
       include: {
         _count: {
