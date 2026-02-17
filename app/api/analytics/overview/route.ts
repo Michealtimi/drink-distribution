@@ -113,7 +113,7 @@ export async function GET() {
     ])
 
     // Calculate conversion rate
-    const customerLeads = leadsByStatus.find(s => s.status === 'CUSTOMER' || s.status === 'REPEAT_CUSTOMER')
+    const customerLeads = leadsByStatus.find((s: typeof leadsByStatus[number]) => s.status === 'CUSTOMER' || s.status === 'REPEAT_CUSTOMER')
     const conversionRate = totalLeads > 0 
       ? ((customerLeads?._count || 0) / totalLeads) * 100 
       : 0
