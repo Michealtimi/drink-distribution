@@ -115,17 +115,28 @@ async function getTemplate(
   city?: City
 ): Promise<string | null> {
   try {
+    // Match templates that are either specific to the provided category/city
+    // or are generic (null). This allows non-city templates to be used when
+    // a lead has `city` set.
+    const where: any = {
+      type,
+      stage,
+      isActive: true,
+    }
+
+    if (category) {
+      where.AND = where.AND || []
+      where.AND.push({ OR: [{ category }, { category: null }] })
+    }
+
+    if (city) {
+      where.AND = where.AND || []
+      where.AND.push({ OR: [{ city }, { city: null }] })
+    }
+
     const template = await prisma.messageTemplate.findFirst({
-      where: {
-        type,
-        stage,
-        isActive: true,
-        ...(category && { category }),
-        ...(city && { city }),
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
+      where,
+      orderBy: { createdAt: 'desc' },
     })
 
     return template?.content || null
@@ -162,14 +173,22 @@ export async function generateMessage(
   }
 
   const template = await getTemplate('WHATSAPP', stage, context.category, context.city)
+
+  let content: string
+  let fromTemplate = false
+
   if (template) {
-    return { content: replaceVariables(template, context), fromTemplate: true }
+    content = replaceVariables(template, context)
+    fromTemplate = true
+  } else {
+    if (status === LeadStatus.MESSAGED || status === LeadStatus.INTERESTED) {
+      content = generateFollowUpMessage(context)
+    } else {
+      content = generateFirstMessage(context)
+    }
   }
 
-  if (status === LeadStatus.MESSAGED || status === LeadStatus.INTERESTED) {
-    return { content: generateFollowUpMessage(context), fromTemplate: false }
-  }
-  return { content: generateFirstMessage(context), fromTemplate: false }
+  return { content, fromTemplate }
 }
 
 /**
