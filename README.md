@@ -1,97 +1,57 @@
-# Beverage Distribution Automation System
+# Beverage Distribution Operations Platform
 
-A zero-budget CRM system for FMCG beverage distribution in Lagos and Abuja.
+An operations-focused application for beverage distribution teams. It brings lead management, customer records, order tracking, payment records, delivery planning, and follow-up workflows into one workspace.
 
-## Business Focus
+## Product workflows
 
-- **Products**: Red Bull, Alternative energy drink, Cognac (optional: bottled water)
-- **Customers**: Gyms, Event centers, Clubs & lounges, Offices, Small retailers
-- **Cities**: Lagos, Abuja
+- Lead capture, import, validation, and prospect management
+- Customer records and relationship history
+- Order creation and order-status tracking
+- Payment recording and outstanding-payment visibility
+- Delivery planning and route-oriented workflows
+- Follow-up scheduling and operational reminders
+- Basic operational analytics
+- WhatsApp-assisted communication workflows
 
-## Tech Stack
+Communication automation should be used with appropriate customer consent and in line with WhatsApp policies. The application is not intended for unsolicited bulk messaging.
 
-- **Frontend**: Next.js 14 (App Router)
-- **Backend**: Next.js API routes
-- **Database**: PostgreSQL (Supabase / Railway free tier)
-- **ORM**: Prisma
-- **Scraping**: Playwright / Cheerio (Phase 2)
-- **Cron**: node-cron / Vercel cron (Phase 3)
+## Technology
 
-## Setup
+- Next.js 14 and React
+- TypeScript
+- PostgreSQL and Prisma
+- Zod
+- Playwright
+- Scheduled jobs
+- WhatsApp Web integration
 
-1. **Install dependencies** (pnpm recommended):
-   ```bash
-   pnpm install
-   ```
+## Local development
 
-2. **Install Playwright Chromium** (for internal scrapers):
-   ```bash
-   pnpm pw
-   ```
-   Verify: `pnpm pw:check`
+### Prerequisites
 
-3. **Set up database**:
-   - Create a PostgreSQL database (Supabase or Railway free tier)
-   - Copy `.env.example` to `.env`
-   - Update `DATABASE_URL` in `.env`
+- Node.js compatible with the project
+- pnpm
+- PostgreSQL
+- Chromium/Playwright browser dependencies where browser automation is used
 
-4. **Initialize database**:
-   ```bash
-   pnpm prisma generate
-   pnpm db push
-   ```
+### Setup
 
-5. **Run development server**:
-   ```bash
-   pnpm dev
-   ```
-
-See **AUDIT_AND_STRATEGY.md** for a full audit and run commands. See **INTERNAL_SCRAPERS.md** for scraper usage.
-
-## Project Structure
-
-```
-├── app/                    # Next.js App Router
-│   ├── api/               # API routes
-│   ├── leads/             # Leads management pages
-│   ├── customers/         # Customer management pages
-│   └── orders/            # Order management pages
-├── components/            # React components
-├── lib/                   # Utilities, message generator
-├── prisma/                # Prisma schema
-└── .cursor/rules/         # Cursor AI rules
+```bash
+git clone https://github.com/Michealtimi/drink-distribution.git
+cd drink-distribution
+pnpm install
+cp .env.example .env
+npx prisma generate
+npx prisma db push
+pnpm dev
 ```
 
-## Phases
+Set the required environment variables in `.env` before running the application. Keep database credentials, session data, API keys, and scheduled-job secrets out of version control.
 
-### Phase 1 (Current)
-- ✅ Database schema
-- ✅ CRM UI foundation
-- 🔄 Manual lead entry
-- 🔄 Message generator
+## Before deploying
 
-### Phase 2
-- Lead scrapers (Google Maps, Instagram, directories)
-- Auto lead import
-- Deduplication
+Review authentication and authorization on every API route, ensure scheduled jobs fail closed when their secret is absent, apply rate limits to sensitive endpoints, and validate all external input. Scraping and browser automation must respect target-site terms, privacy requirements, and applicable law. Protect WhatsApp session data and obtain appropriate consent before contacting customers.
 
-### Phase 3
-- Follow-up automation
-- Route planning UI
-- Basic analytics
+## Project status
 
-## Key Principles
-
-- **Credit discipline**: Trial = pay after delivery (max 48h)
-- **No soft credit**: Business is NOT a lender
-- **Route-based**: Group by area and delivery day
-- **Human messaging**: No buzzwords, no emojis, operationally credible
-
-## Legal Note
-
-Scraping must be:
-- Slow and respectful
-- From public pages only
-- Respect robots.txt
-- Avoid heavy traffic
-# drink-distribution
+This repository demonstrates an operations workflow and its implementation. Review the current code, environment configuration, and security controls before using it with real customer or payment data.
